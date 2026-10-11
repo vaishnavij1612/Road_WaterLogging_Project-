@@ -1,0 +1,3 @@
+# This directory stores predicted segmentation masks.
+# Generated automatically during inference.
+# Not tracked by Git — run prediction to populate.

@@ -1,0 +1,150 @@
+import tempfile
+import unittest
+from pathlib import Path
+import torch
+import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+from src.segmentation import UNet
+from src.train import (
+    atomic_torch_save,
+    save_checkpoint_bundle,
+    detect_checkpoint_to_resume,
+    save_history_json,
+)
+
+
+class TestTrainResumePipeline(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.checkpoint_dir = Path(self.temp_dir.name) / "models"
+        self.drive_dir = Path(self.temp_dir.name) / "drive_checkpoints"
+        self.reports_dir = Path(self.temp_dir.name) / "reports"
+
+        self.model = UNet(in_channels=3, num_classes=10, base_features=8)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode="min")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_checkpoint_bundle_saved_and_mirrored(self):
+        """Verify checkpoint payload contains all required items and is mirrored to Drive."""
+        history = [
+            {"epoch": 1, "train_loss": 0.5, "val_loss": 0.4, "mIoU": 0.6},
+            {"epoch": 2, "train_loss": 0.4, "val_loss": 0.35, "mIoU": 0.65},
+        ]
+        val_metrics = {"mIoU": 0.65, "val_loss": 0.35}
+        config = {"lr": 1e-3, "num_classes": 10}
+
+        save_checkpoint_bundle(
+            epoch=2,
+            model=self.model,
+            optimizer=self.optimizer,
+            scheduler=self.scheduler,
+            best_miou=0.65,
+            patience_counter=1,
+            history=history,
+            val_metrics=val_metrics,
+            config=config,
+            checkpoint_dir=self.checkpoint_dir,
+            drive_dir=self.drive_dir,
+            is_best=True,
+        )
+
+        # Check local files exist
+        local_last = self.checkpoint_dir / "floodnet_unet_last.pth"
+        local_best = self.checkpoint_dir / "floodnet_unet_best.pth"
+        self.assertTrue(local_last.exists())
+        self.assertTrue(local_best.exists())
+
+        # Check Drive mirror files exist
+        drive_last = self.drive_dir / "floodnet_unet_last.pth"
+        drive_best = self.drive_dir / "floodnet_unet_best.pth"
+        self.assertTrue(drive_last.exists())
+        self.assertTrue(drive_best.exists())
+
+        # Inspect checkpoint contents
+        ckpt = torch.load(drive_last, map_location="cpu", weights_only=False)
+        self.assertIn("epoch", ckpt)
+        self.assertIn("model_state_dict", ckpt)
+        self.assertIn("optimizer_state_dict", ckpt)
+        self.assertIn("scheduler_state_dict", ckpt)
+        self.assertIn("best_miou", ckpt)
+        self.assertIn("patience_counter", ckpt)
+        self.assertIn("history", ckpt)
+        self.assertIn("val_metrics", ckpt)
+        self.assertIn("config", ckpt)
+
+        self.assertEqual(ckpt["epoch"], 2)
+        self.assertEqual(ckpt["best_miou"], 0.65)
+        self.assertEqual(ckpt["patience_counter"], 1)
+        self.assertEqual(len(ckpt["history"]), 2)
+        self.assertEqual(ckpt["history"][1]["mIoU"], 0.65)
+
+    def test_auto_detect_latest_checkpoint(self):
+        """Verify detect_checkpoint_to_resume picks the checkpoint with highest epoch."""
+        # Create an older checkpoint at local (epoch 2)
+        save_checkpoint_bundle(
+            epoch=2,
+            model=self.model,
+            optimizer=self.optimizer,
+            scheduler=self.scheduler,
+            best_miou=0.60,
+            patience_counter=0,
+            history=[],
+            val_metrics={},
+            config={},
+            checkpoint_dir=self.checkpoint_dir,
+            drive_dir=None,
+            is_best=False,
+        )
+
+        # Create a newer checkpoint on Drive (epoch 5)
+        save_checkpoint_bundle(
+            epoch=5,
+            model=self.model,
+            optimizer=self.optimizer,
+            scheduler=self.scheduler,
+            best_miou=0.72,
+            patience_counter=2,
+            history=[],
+            val_metrics={},
+            config={},
+            checkpoint_dir=self.drive_dir,
+            drive_dir=None,
+            is_best=True,
+        )
+
+        detected = detect_checkpoint_to_resume(
+            checkpoint_dir=self.checkpoint_dir,
+            drive_dir=self.drive_dir,
+        )
+
+        self.assertIsNotNone(detected)
+        self.assertEqual(detected, self.drive_dir / "floodnet_unet_last.pth")
+
+        loaded = torch.load(detected, map_location="cpu", weights_only=False)
+        self.assertEqual(loaded["epoch"], 5)
+        self.assertEqual(loaded["best_miou"], 0.72)
+        self.assertEqual(loaded["patience_counter"], 2)
+
+    def test_history_json_saving(self):
+        """Verify incremental history json is saved to local and drive."""
+        history = [{"epoch": 1, "mIoU": 0.5}]
+        save_history_json(
+            history=history,
+            best_miou=0.5,
+            total_time_seconds=12.5,
+            reports_dir=self.reports_dir,
+            drive_dir=self.drive_dir,
+            severity_methodology="Test Methodology",
+        )
+
+        self.assertTrue((self.reports_dir / "training_history.json").exists())
+        self.assertTrue((self.drive_dir / "training_history.json").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,3 @@
+# This directory stores training curves, confusion matrices, and metric graphs.
+# Generated automatically during training and evaluation.
+# Not tracked by Git — run training/evaluation to populate.

@@ -1,0 +1,96 @@
+# =============================================================
+# Road Waterlogging Project — .gitignore
+# =============================================================
+
+# -------------------------------------------------------
+# Python cache & compiled files
+# -------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyo
+.Python
+
+# -------------------------------------------------------
+# Virtual environments
+# -------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# -------------------------------------------------------
+# Jupyter
+# -------------------------------------------------------
+.ipynb_checkpoints/
+
+# -------------------------------------------------------
+# FloodNet Dataset — NEVER UPLOAD (too large, ~20+ GB)
+# -------------------------------------------------------
+floodnet_dataset/
+dataset/
+FloodNet.zip
+floodnet_val.zip
+floodnet_train_part1.zip
+floodnet_train_part2.zip
+floodnet_train_part3.zip
+*.crdownload
+
+# -------------------------------------------------------
+# Colab upload staging area (dataset ZIPs, transfer infra)
+# -------------------------------------------------------
+colab_upload/
+
+# -------------------------------------------------------
+# Temporary Colab / Cloudflare transfer infrastructure
+# -------------------------------------------------------
+cloudflared.exe
+serve_with_range.py
+start_tunnel_service.py
+stop_tunnel_service.py
+
+# -------------------------------------------------------
+# Model checkpoints (large binary files, ~89 MB each)
+# Store via Git-LFS or release assets if sharing is needed
+# -------------------------------------------------------
+models/*.pth
+models/*.pt
+models/*.ckpt
+*.pth
+*.pt
+*.ckpt
+
+# -------------------------------------------------------
+# Source archive (temporary build artifact)
+# -------------------------------------------------------
+Road_Waterlogging_Source.zip
+
+# -------------------------------------------------------
+# Temporary and log files
+# -------------------------------------------------------
+*.tmp
+*.temp
+*.log
+
+# -------------------------------------------------------
+# IDE / OS metadata
+# -------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -------------------------------------------------------
+# Outputs — keep directory structure, exclude large binary
+# outputs generated from dataset (not committed by default)
+# -------------------------------------------------------
+outputs/graphs/*.png
+outputs/graphs/*.jpg
+outputs/masks/*.png
+outputs/masks/*.jpg
+outputs/predictions/*.png
+outputs/predictions/*.jpg
+outputs/visualizations/*.png
+outputs/visualizations/*.jpg

@@ -1,0 +1,40 @@
+{
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.307618,
+      "val_loss": 1.286677,
+      "mIoU": 0.1789,
+      "pixel_accuracy": 0.5323,
+      "road_flooded_iou": 0.0,
+      "road_non_flooded_iou": 0.3508,
+      "water_iou": 0.2922,
+      "elapsed_s": 496.9
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.134703,
+      "val_loss": 1.159574,
+      "mIoU": 0.2072,
+      "pixel_accuracy": 0.5666,
+      "road_flooded_iou": 0.0,
+      "road_non_flooded_iou": 0.3823,
+      "water_iou": 0.299,
+      "elapsed_s": 656.0
+    },
+    {
+      "epoch": 3,
+      "train_loss": 1.0841,
+      "val_loss": 1.094689,
+      "mIoU": 0.1933,
+      "pixel_accuracy": 0.5665,
+      "road_flooded_iou": 0.0,
+      "road_non_flooded_iou": 0.3698,
+      "water_iou": 0.3327,
+      "elapsed_s": 484.6
+    }
+  ],
+  "best_miou": 0.2072,
+  "total_training_seconds": 1639.1,
+  "severity_methodology": "Project-defined rule-based severity tiers derived from the predicted flooded-road area percentage. FloodNet does NOT provide ground-truth severity labels."
+}

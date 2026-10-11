@@ -1,0 +1,3 @@
+# This directory stores trained model checkpoints (.pth files).
+# Model checkpoints are excluded from Git due to their large size (~89 MB each).
+# Run training to generate checkpoints, or obtain a shared checkpoint from a teammate.

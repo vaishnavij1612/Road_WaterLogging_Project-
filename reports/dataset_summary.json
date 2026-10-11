@@ -1,0 +1,69 @@
+{
+  "dataset_path": "D:\\Road_Waterlogging_Project\\dataset",
+  "exists": true,
+  "inspection_date": "2026-10-04",
+  "inspection_status": "COMPLETE",
+  "total_files": 9321,
+  "total_images": 9296,
+  "annotation_files": 25,
+  "image_folder": "dataset/Flood Images",
+  "annotation_folder": "dataset/Annotation",
+  "image_formats": { ".jpg": 6403, ".png": 2892, ".jpeg": 1 },
+  "corrupted_images": [],
+  "duplicate_confirmed": ["flood_2572.jpg", "flood_5309.jpg"],
+  "dimension_stats": {
+    "min_width": 299,
+    "max_width": 4954,
+    "min_height": 168,
+    "max_height": 3049,
+    "median_width": 1280,
+    "median_height": 1023,
+    "sample_size": 500
+  },
+  "color_modes": { "RGB": 498, "RGBA": 1, "L": 1 },
+  "structure": {
+    "top_level_subdirs": ["Annotation", "Flood Images"],
+    "has_train_val_test_split": false,
+    "split_folders": []
+  },
+  "annotations": {
+    "format": "LabelMe JSON (polygon)",
+    "annotated_image_count": 25,
+    "unannotated_image_count": 9271,
+    "shape_types": { "polygon": 103 },
+    "has_coco_json": false,
+    "has_voc_xml": false,
+    "has_yolo_txt": false,
+    "has_csv_metadata": false,
+    "has_pixel_segmentation_masks": false,
+    "has_bounding_boxes": false,
+    "has_water_flood_labels": false,
+    "has_road_specific_water_labels": false,
+    "has_severity_depth_labels": false,
+    "found_label_categories": ["Person", "Tree", "House", "Builbing", "Traffic Sign", "Bridge", "Forest", "Car", "Truck", "Road"],
+    "label_counts": {
+      "Person": 19, "Tree": 14, "House": 13, "Builbing": 13,
+      "Traffic Sign": 12, "Bridge": 10, "Forest": 8, "Car": 6, "Truck": 4, "Road": 4
+    },
+    "note": "Annotations describe scene objects (people, vehicles, buildings) present IN flood images. They do NOT delineate water or flood pixels."
+  },
+  "classes": {
+    "binary_flood_vs_normal": false,
+    "all_images_are_flood": true,
+    "has_negative_normal_class": false,
+    "detected_classes": ["flood_scene"],
+    "is_imbalanced": "N/A (single class)"
+  },
+  "capabilities": {
+    "binary_classification_flood_vs_normal": false,
+    "water_pixel_segmentation": false,
+    "flood_water_bounding_box_detection": false,
+    "affected_road_area_calculation": false,
+    "severity_label_prediction": false,
+    "scene_object_detection_25_images": true,
+    "scene_object_segmentation_25_images": true,
+    "transfer_learning_feature_extraction": true
+  },
+  "recommended_approach": "Option A — Augment with dry road images to create binary flood/normal dataset, train MobileNetV2 classifier, use Grad-CAM for qualitative visual attribution only.",
+  "integrity_statement": "All findings based on verified filesystem and file-content inspection. No values invented or assumed."
+}

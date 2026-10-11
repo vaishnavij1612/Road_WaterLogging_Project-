@@ -1,0 +1,3 @@
+# This directory stores additional visualizations (overlays, heatmaps, etc.).
+# Generated automatically during inference.
+# Not tracked by Git — run prediction to populate.
