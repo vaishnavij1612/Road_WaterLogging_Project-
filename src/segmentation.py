@@ -111,6 +111,25 @@ class MulticlassDiceLoss(nn.Module):
         self.smooth = smooth
         self.ignore_index = ignore_index
 
+    def _class_loss(
+        self, probs: torch.Tensor, targets_one_hot: torch.Tensor, class_index: int
+    ) -> Optional[torch.Tensor]:
+        pred_c = probs[:, class_index, :, :]
+        target_c = targets_one_hot[:, class_index, :, :]
+        intersection = (pred_c * target_c).sum(dim=(1, 2))
+        target_area = target_c.sum(dim=(1, 2))
+        cardinality = (pred_c + target_c).sum(dim=(1, 2))
+        dice = (2.0 * intersection + self.smooth) / (cardinality + self.smooth)
+
+        # A class absent from an image contains no positive localization
+        # evidence. Including its Dice score (which is always near zero)
+        # makes every negative image push that class down, often drowning
+        # the few positive examples for rare classes such as Road-flooded.
+        present = target_area > 0
+        if not present.any():
+            return None
+        return 1.0 - dice[present].mean()
+
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -128,14 +147,12 @@ class MulticlassDiceLoss(nn.Module):
         for c in range(num_classes):
             if self.ignore_index is not None and c == self.ignore_index:
                 continue
-            pred_c = probs[:, c, :, :]
-            target_c = targets_one_hot[:, c, :, :]
+            class_loss = self._class_loss(probs, targets_one_hot, c)
+            if class_loss is not None:
+                dice_losses.append(class_loss)
 
-            intersection = (pred_c * target_c).sum(dim=(1, 2))
-            cardinality = (pred_c + target_c).sum(dim=(1, 2))
-
-            dice = (2.0 * intersection + self.smooth) / (cardinality + self.smooth)
-            dice_losses.append(1.0 - dice.mean())
+        if not dice_losses:
+            return logits.sum() * 0.0
 
         return torch.stack(dice_losses).mean()
 

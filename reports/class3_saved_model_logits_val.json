@@ -1,0 +1,43 @@
+{
+  "checkpoint": "models/floodnet_unet_best.pth",
+  "split": "val",
+  "samples": [
+    {
+      "image": "6596.jpg",
+      "target_class3_pixels": 9849,
+      "predicted_class3_pixels": 0,
+      "class3_argmax_fraction_on_gt": 0.0,
+      "mean_class3_probability_on_gt": 0.0729423314332962,
+      "mean_class3_logit_on_gt": 0.30895936489105225,
+      "mean_best_competing_logit_on_gt": 2.55796480178833
+    },
+    {
+      "image": "6598.jpg",
+      "target_class3_pixels": 21754,
+      "predicted_class3_pixels": 0,
+      "class3_argmax_fraction_on_gt": 0.0,
+      "mean_class3_probability_on_gt": 0.08687543869018555,
+      "mean_class3_logit_on_gt": 0.40930595993995667,
+      "mean_best_competing_logit_on_gt": 2.3612256050109863
+    },
+    {
+      "image": "6690.jpg",
+      "target_class3_pixels": 1257,
+      "predicted_class3_pixels": 0,
+      "class3_argmax_fraction_on_gt": 0.0,
+      "mean_class3_probability_on_gt": 0.06842213124036789,
+      "mean_class3_logit_on_gt": -0.2788630723953247,
+      "mean_best_competing_logit_on_gt": 1.3305450677871704
+    },
+    {
+      "image": "6694.jpg",
+      "target_class3_pixels": 7771,
+      "predicted_class3_pixels": 0,
+      "class3_argmax_fraction_on_gt": 0.0,
+      "mean_class3_probability_on_gt": 0.09327790141105652,
+      "mean_class3_logit_on_gt": -0.11102768778800964,
+      "mean_best_competing_logit_on_gt": 1.5229947566986084
+    }
+  ],
+  "note": "Diagnostic subset only; full validation metrics are in evaluation_val.json. Test split not accessed."
+}

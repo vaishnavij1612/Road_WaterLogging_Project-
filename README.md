@@ -80,6 +80,14 @@ For Google Colab, mount persistent Drive and pass a durable directory:
 python -m src.train --epochs 15 --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
 ```
 
+For a GPU run, install the CUDA-enabled PyTorch build that matches the host, confirm `torch.cuda.is_available()` is `True`, and place both the extracted dataset and the ignored `floodnet_unet_last.pth` checkpoint on that host. Keep checkpoints on persistent storage. The local CPU-only runtime cannot complete a useful full-data run. Resume the epoch-3 checkpoint with the corrected loss and train to a larger total epoch count; validation is evaluated and checkpoints are saved each epoch:
+
+```bash
+python -m src.train --epochs 20 --resume models/floodnet_unet_last.pth --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
+```
+
+Select the checkpoint using validation metrics. Once training and model selection are finished, evaluate validation as needed and run the held-out test split once for final reporting.
+
 To intentionally start a new run without resuming, pass `--no-auto-resume`. Checkpoints are ignored by Git; keep copies in persistent storage because local runtime disks are not backups.
 
 Useful options include `--floodnet-dir`, `--batch-size`, `--subset`, `--base-features`, `--checkpoint-dir`, and `--no-auto-resume`. Use the same architecture width when resuming. An architecture mismatch now stops with an error instead of silently restarting.
@@ -115,7 +123,7 @@ Run the included CPU-compatible tests:
 python -m unittest discover -s tests -v
 ```
 
-Tests cover FloodNet pair loading, U-Net output shapes, finite loss and gradients, an actual two-epoch synthetic save/resume cycle, checkpoint persistence helpers, inference output sizing, and severity formulas/boundaries.
+Tests cover FloodNet pair loading, U-Net output shapes, finite loss and gradients, class-absent Dice behavior, a controlled class-3 learnability check, an actual two-epoch synthetic save/resume cycle, checkpoint persistence helpers, inference output sizing, and severity formulas/boundaries.
 
 ## Current model status and limitations
 
@@ -126,7 +134,11 @@ The checked-in `reports/training_history.json` documents a partial three-epoch r
 | Validation | 450 | 0.2072 | 0.5666 | 0.0000 | 0.3823 | 0.2990 | 0 |
 | Held-out test | 448 | 0.2084 | 0.5611 | 0.0000 | 0.3819 | 0.3350 | 0 |
 
-These complete-split results confirm the model does not detect the target Road-flooded class: the validation and test ground truth contain 732,160 and 647,747 resized class-3 pixels, respectively, yet the model predicts none. A deterministic sample of 64 evenly spaced training masks contained Road-flooded labels in 8 images, and the class remained present in all 8 after the 256 × 256 nearest-neighbor resize. This supports sparse image-level class representation as a possible contributor, but does not prove the root cause. The actual-data one-step sanity check verified finite loss/gradients and an optimizer update; it is not evidence of model quality. No full retraining was performed because the available PyTorch build is CPU-only. Do not present affected-area or severity estimates from this checkpoint as reliable. Metrics and diagnostics are in `reports/evaluation_val.json`, `reports/evaluation_test.json`, `reports/downsampling_diagnostic.json`, and `reports/sanity_check.json`; real comparison images are generated under `outputs/visualizations/` (the images are ignored by Git).
+These complete-split results confirm the old checkpoint does not detect Road-flooded: the validation and test ground truth contain 732,160 and 647,747 resized class-3 pixels, respectively, yet it predicts none. The full train-mask scan found class 3 in 162/1,445 images (11.2%) and 2.75% of pixels after the 256 × 256 nearest-neighbor resize; all those positive masks retain class 3 after resize. Thus class 3 is relatively sparse by image and pixel, but is neither absent nor erased by preprocessing. On four validation images with class-3 ground truth, the old model assigned class 3 mean probabilities of 0.068–0.093 on true class-3 pixels, while the strongest competing class logit exceeded the class-3 logit by 1.61–2.25 on average; it never selected class 3. Validation visual comparisons on those images show broad confusions in addition to the missing class.
+
+The identified loss defect was in `MulticlassDiceLoss`: it averaged each class's Dice score over every image, so an image with no positive pixels for a class contributed an automatic near-zero Dice score. With only 11.2% positive training images and batch size four, about 63% of randomly composed batches contain no Road-flooded image. That made the Dice term repeatedly penalize class-3 probability without positive localization evidence. The loss now averages Dice only over images where that class is present; weighted cross-entropy continues to train against false positives on negative images. A regression test covers absent-class handling. The controlled U-Net learnability test reaches class-3 IoU ≥0.85 on a small deliberately learnable mask batch. A separate real-data overfit using four class-3-positive **training** images at 64 × 64 reached class-3 IoU 0.996 after 300 updates. This verifies the data/loss/optimizer path can learn class 3, but is an overfit sanity check, not generalization evidence.
+
+No full retraining was performed because this workspace has PyTorch 2.14.1 CPU-only and no CUDA device. The corrected loss, tests, full class distribution, and validation-logit diagnostic are saved in `reports/class_distribution_train.json`, `reports/class3_saved_model_logits_val.json`, and `reports/class3_controlled_experiment.json`. The old checkpoint's affected-area and severity estimates remain unreliable until a GPU training run produces effective Road-flooded validation performance. Keep the test split out of tuning; its existing one-time results above are historical baseline values. Other diagnostics are in `reports/evaluation_val.json`, `reports/evaluation_test.json`, `reports/downsampling_diagnostic.json`, and `reports/sanity_check.json`; comparison images are in the ignored `outputs/visualizations/` directory.
 
 FloodNet is aerial imagery. Generalization to street-level camera images is unverified. The model predicts 2D semantic classes; its project tiers do not estimate depth, water volume, passability, or safety. The repository’s generic `dataset/` collection is not suitable for training this FloodNet segmentation model because its annotations do not mark flooded-road pixels.
 

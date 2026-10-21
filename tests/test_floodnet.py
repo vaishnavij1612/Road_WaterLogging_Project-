@@ -10,7 +10,12 @@ from src.config import FLOODNET_DIR, NUM_CLASSES
 from src.dataset_loader import FloodNetDataset
 from src.predict import FloodNetPredictor
 from src.preprocessing import DualSegmentationTransform
-from src.segmentation import UNet, CombinedSegmentationLoss, calculate_floodnet_road_severity
+from src.segmentation import (
+    UNet,
+    CombinedSegmentationLoss,
+    MulticlassDiceLoss,
+    calculate_floodnet_road_severity,
+)
 
 
 class TestFloodNetPipeline(unittest.TestCase):
@@ -43,6 +48,56 @@ class TestFloodNetPipeline(unittest.TestCase):
         self.assertTrue(torch.isfinite(loss))
         self.assertIsNotNone(logits.grad)
         self.assertTrue(torch.isfinite(logits.grad).all())
+
+    def test_absent_class_does_not_add_dice_penalty(self):
+        criterion = MulticlassDiceLoss()
+        logits = torch.randn(2, NUM_CLASSES, 8, 8)
+        targets = torch.full((2, 8, 8), 4, dtype=torch.long)
+        targets[0, 2:5, 2:5] = 3
+        probs = torch.softmax(logits, dim=1)
+        one_hot = torch.nn.functional.one_hot(targets, NUM_CLASSES).permute(0, 3, 1, 2).float()
+
+        batch_class3_loss = criterion._class_loss(probs, one_hot, 3)
+        positive_only_class3_loss = criterion._class_loss(probs[:1], one_hot[:1], 3)
+        self.assertTrue(torch.allclose(batch_class3_loss, positive_only_class3_loss))
+
+    def test_unet_learns_road_flooded_on_controlled_batch(self):
+        previous_threads = torch.get_num_threads()
+        torch.set_num_threads(1)
+        try:
+            torch.manual_seed(7)
+            batch_size, size = 4, 32
+            images = torch.zeros(batch_size, 3, size, size)
+            targets = torch.zeros(batch_size, size, size, dtype=torch.long)
+            targets[:, 8:25, 4:28] = 4
+            targets[:, 14:21, 10:22] = 3
+            # Input cues make this a controlled learnability check, not a claim
+            # about FloodNet generalization: channel 0 marks the road and
+            # channel 1 marks the flooded-road region.
+            images[:, 0, 8:25, 4:28] = 1.0
+            images[:, 1, 14:21, 10:22] = 1.0
+
+            model = UNet(in_channels=3, num_classes=NUM_CLASSES, base_features=4)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+            class_weights = torch.ones(NUM_CLASSES)
+            class_weights[3] = 5.0
+            criterion = CombinedSegmentationLoss(
+                class_weights=class_weights, ce_weight=0.5, dice_weight=0.5
+            )
+            for _ in range(400):
+                optimizer.zero_grad()
+                loss = criterion(model(images), targets)
+                loss.backward()
+                optimizer.step()
+
+            with torch.no_grad():
+                predicted = model(images).argmax(dim=1)
+            intersection = ((predicted == 3) & (targets == 3)).sum().item()
+            union = ((predicted == 3) | (targets == 3)).sum().item()
+            self.assertGreater(intersection, 0, "Model never predicted Road-flooded class 3")
+            self.assertGreaterEqual(intersection / union, 0.85)
+        finally:
+            torch.set_num_threads(previous_threads)
 
     def test_severity_rules_and_road_only_denominator(self):
         cases = [(1, "NONE"), (30, "LOW"), (80, "MODERATE"), (81, "SEVERE")]

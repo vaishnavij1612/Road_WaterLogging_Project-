@@ -1,0 +1,21 @@
+{
+  "experiment": "controlled_train_subset_overfit",
+  "split": "train",
+  "sample_names": [
+    "6597.jpg",
+    "6601.jpg",
+    "6603.jpg",
+    "6610.jpg"
+  ],
+  "image_size": [
+    64,
+    64
+  ],
+  "base_features": 4,
+  "steps": 300,
+  "class3_target_pixels": 5363,
+  "class3_predicted_pixels": 5379,
+  "class3_iou": 0.9962832187325776,
+  "criterion": "corrected class-present Dice + CE, class 3 weight 5",
+  "limitation": "Deliberately tiny train-set overfit demonstrates optimization pathway only; not a generalization metric."
+}
