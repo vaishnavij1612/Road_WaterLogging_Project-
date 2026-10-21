@@ -1,0 +1,42 @@
+{
+  "status": "blocked_pending_gpu_compute",
+  "verified_at_local_date": "2026-10-21",
+  "runtime": {
+    "python": "3.14.2",
+    "pytorch": "2.14.1+cpu",
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "visible_display_adapter": "Intel(R) UHD Graphics",
+    "nvidia_smi_available": false,
+    "docker_gpu_runtime_available": false,
+    "accessible_remote_gpu_runtime_or_tool": false
+  },
+  "corrected_training_run": {
+    "started": false,
+    "reason": "No CUDA GPU or accessible remote GPU runtime is available. Full FloodNet training was not run on CPU.",
+    "validation_after_corrected_loss": null,
+    "final_test_after_corrected_loss": null
+  },
+  "initialization_checkpoint": {
+    "path": "models/floodnet_unet_best.pth",
+    "epoch": 2,
+    "best_validation_miou": 0.2072,
+    "model_config": {
+      "num_classes": 10,
+      "base_features": 32,
+      "image_size": [
+        256,
+        256
+      ]
+    },
+    "strict_model_state_load": "all keys matched",
+    "optimizer_state_entries": 64,
+    "choice": "Use model weights only and start fresh optimizer, scheduler, epoch counter, and run history; retain outputs in separate corrected-dice directories.",
+    "reason": "Adam moments are from the objective with the absent-class Dice penalty and should not be carried into corrected-loss training."
+  },
+  "existing_test_results": {
+    "status": "historical baseline only; not reevaluated during corrected-loss work",
+    "report": "reports/evaluation_test.json"
+  },
+  "gpu_workflow": "See README.md Train and resume section; uses --init-weights, separate --checkpoint-dir and --reports-dir, and persistent --drive-dir."
+}
