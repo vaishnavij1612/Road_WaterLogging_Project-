@@ -48,7 +48,22 @@
     "new_persistent_run_directory": "/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21",
     "baseline_outputs_overwritten": false,
     "runtime_access_verified": false,
-    "runtime_access_note": "The browser automation tool stopped before reading Chrome state because it could not determine the current browser URL with enough confidence. No Colab notebook or hosted runtime was accessed or executed.",
-    "one_external_action_needed": "In a signed-in Google account, place the extracted FloodNet Supervised v1.0 directory at MyDrive/FloodNet-Supervised_v1.0 and upload the existing best checkpoint to MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth; open the prepared notebook in Colab, select a GPU runtime, then run its setup and training cells."
+    "runtime_access_note": "The notebook loaded in the browser. The user-provided account typeprohelp1@gmail.com was entered in Google's sign-in flow; Google then required a password. No password or authentication secret was entered. Drive, Google storage capacity, Colab temporary disk capacity, and hosted GPU runtime remain inaccessible until the account holder completes sign-in.",
+    "local_assets": {
+      "dataset_root": "floodnet_dataset/FloodNet-Supervised_v1.0",
+      "dataset_size_gb": 12.13,
+      "split_pairs": {"train": 1445, "val": 450, "test": 448},
+      "baseline_checkpoint": "models/floodnet_unet_best.pth",
+      "baseline_checkpoint_size_mb": 93,
+      "local_drive_free_gb": 47.64,
+      "verified_compressed_archives": {
+        "path": "colab_upload/",
+        "size_gb": 10.26,
+        "crc": "all four FloodNet ZIP archives passed CRC validation",
+        "contents": "three training archives with 1,445 image/mask pairs and one validation archive with 450 pairs; no test split"
+      },
+      "unused_invalid_archive": "floodnet_dataset/FloodNet.zip (4.08 GB; not recognized as a valid ZIP archive; do not transfer)"
+    },
+    "one_external_action_needed": "Complete Google sign-in for typeprohelp1@gmail.com in the open browser, including any password and MFA prompts directly with Google, then authorize Colab Drive access. Do not send credentials in chat. Afterward, verify Drive free space and Colab temporary-disk capacity before transferring local assets, select a GPU, and execute the prepared notebook."
   }
 }
