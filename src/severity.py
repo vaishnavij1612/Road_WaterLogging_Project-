@@ -7,16 +7,17 @@ IMPORTANT METHODOLOGICAL NOTE:
 The FloodNet dataset does NOT provide Low/Moderate/Severe ground-truth severity labels.
 Therefore, all severity levels are explicitly designated as:
 "Project-defined rule-based severity tiers derived from the predicted flooded-road area percentage."
+These heuristic tiers do not estimate water depth, road passability, or safety.
 
 Severity tiers are computed from:
     Flooded Road Ratio = (Road-flooded pixels) / (Road-flooded + Road-non-flooded pixels) * 100%
 
 Project-Defined Thresholds:
 ---------------------------
-- <= 0.5%         = NONE     (Surface completely dry / normal conditions)
-- >0.5% to 15.0%  = LOW      (Minor surface pooling, passable with caution)
-- >15.0% to 40.0% = MODERATE (Substantial water accumulation, lane disruption, aquaplaning risk)
-- >40.0%          = SEVERE   (Widespread roadway submergence, road impassable)
+- <= 0.5%         = NONE
+- >0.5% to 15.0%  = LOW
+- >15.0% to 40.0% = MODERATE
+- >40.0%          = SEVERE
 """
 
 from typing import Dict, Any, Tuple

@@ -48,10 +48,18 @@ def main():
         return
 
     metrics = predictor.checkpoint_metadata.get("val_metrics") or {}
-    if metrics.get("road_flooded_iou", 0) == 0:
-        st.warning(
-            "This checkpoint records Road-flooded validation IoU of 0.0. "
-            "Segmentation is available for demonstration, but flooded-road area and severity are not validated."
+    road_flooded_iou = metrics.get("road_flooded_iou")
+    if road_flooded_iou is None or road_flooded_iou <= 0:
+        st.error(
+            "Model status: Road-flooded detection is not validated. "
+            "This checkpoint has no positive recorded Road-flooded validation IoU. "
+            "Any highlighted flooded-road pixels, area percentage, and tier below are experimental outputs, "
+            "not reliable findings. Do not use them to make road-safety or travel decisions."
+        )
+    else:
+        st.info(
+            f"Checkpoint recorded Road-flooded validation IoU: {road_flooded_iou:.4f}. "
+            "This is an academic prototype; a single image cannot establish water depth, passability, or safety."
         )
 
     upload = st.file_uploader("Upload a road or aerial image", type=["jpg", "jpeg", "png", "webp"])
@@ -89,8 +97,8 @@ def main():
     severity = result["severity"]
     area = severity["road_waterlogged_pct"]
     col1, col2, col3 = st.columns(3)
-    col1.metric("Predicted flooded road area", f"{area:.2f}%" if area is not None else "Unavailable")
-    col2.metric("Project-defined tier", severity["severity_level"])
+    col1.metric("Experimental flooded-road estimate", f"{area:.2f}%" if area is not None else "Unavailable")
+    col2.metric("Project-defined heuristic tier", severity["severity_level"])
     col3.metric("Predicted road pixels", f"{severity['total_road_pixels']:,}")
 
     left, middle, right = st.columns(3)
@@ -106,8 +114,9 @@ def main():
         st.write(f"Checkpoint epoch: {result['checkpoint_metadata'].get('epoch')}")
         st.write(f"Validation metrics: {metrics}")
     st.caption(
-        "FloodNet training imagery is aerial. Predictions may not generalize to street-level images. "
-        "Water outside predicted road pixels is excluded from the road-area calculation."
+        "Academic prototype, not a certified flood-warning system. Severity bands are project-defined heuristics, "
+        "not official FloodNet labels or water-depth estimates. FloodNet training imagery is aerial; "
+        "predictions may not generalize to street-level images. Water outside predicted road pixels is excluded."
     )
 
 
