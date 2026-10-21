@@ -183,6 +183,8 @@ def save_checkpoint_bundle(
     checkpoint_dir: Path,
     drive_dir: Optional[Path] = None,
     is_best: bool = False,
+    best_road_flooded_iou: float = 0.0,
+    is_best_road_flooded: bool = False,
 ):
     """
     Save complete checkpoint bundle containing model state, optimizer state,
@@ -195,6 +197,7 @@ def save_checkpoint_bundle(
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
         "best_miou": best_miou,
+        "best_road_flooded_iou": best_road_flooded_iou,
         "patience_counter": patience_counter,
         "history": history,
         "val_metrics": val_metrics,
@@ -212,6 +215,8 @@ def save_checkpoint_bundle(
             atomic_torch_save(checkpoint_payload, t_dir / "floodnet_unet_last.pth")
             if is_best:
                 atomic_torch_save(checkpoint_payload, t_dir / "floodnet_unet_best.pth")
+            if is_best_road_flooded:
+                atomic_torch_save(checkpoint_payload, t_dir / "floodnet_unet_best_road_flooded.pth")
         except Exception as e:
             print(f"[Checkpoint] Warning: Could not save checkpoint to {t_dir}: {e}")
 
@@ -414,6 +419,7 @@ def train(
 
     start_epoch = 1
     best_miou = 0.0
+    best_road_flooded_iou = 0.0
     patience_counter = 0
     history: List[Dict[str, Any]] = []
 
@@ -467,6 +473,10 @@ def train(
                 completed_epoch = ckpt.get("epoch", 0)
                 start_epoch = completed_epoch + 1
                 best_miou = ckpt.get("best_miou", 0.0)
+                best_road_flooded_iou = ckpt.get(
+                    "best_road_flooded_iou",
+                    (ckpt.get("val_metrics") or {}).get("road_flooded_iou", 0.0),
+                )
                 patience_counter = ckpt.get("patience_counter", 0)
                 history = ckpt.get("history") or []
                 if not history:
@@ -561,6 +571,8 @@ def train(
         history.append(row)
 
         is_best = miou > best_miou
+        road_flooded_iou = val_metrics["road_flooded_iou"]
+        is_best_road_flooded = road_flooded_iou > best_road_flooded_iou
         if is_best:
             best_miou = miou
             patience_counter = 0
@@ -568,6 +580,9 @@ def train(
         else:
             patience_counter += 1
             print(f"  No improvement -- patience {patience_counter}/{patience}")
+        if is_best_road_flooded:
+            best_road_flooded_iou = road_flooded_iou
+            print(f"  * Best Road-flooded checkpoint saved (IoU={best_road_flooded_iou:.4f})")
 
         # Save checkpoint bundle (best & last) to local and Drive
         save_checkpoint_bundle(
@@ -583,6 +598,8 @@ def train(
             checkpoint_dir=checkpoint_dir,
             drive_dir=drive_save_dir,
             is_best=is_best,
+            best_road_flooded_iou=best_road_flooded_iou,
+            is_best_road_flooded=is_best_road_flooded,
         )
 
         # Incrementally save history JSON to local and Drive

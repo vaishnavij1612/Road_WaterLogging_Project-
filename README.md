@@ -62,7 +62,7 @@ Set `FLOODNET_DIR` to use a dataset elsewhere. `ROAD_WATERLOGGING_DATASET_DIR`, 
 
 ## Train and resume
 
-Training saves `floodnet_unet_last.pth` after each epoch, updates `floodnet_unet_best.pth` when validation mIoU improves, logs Road-flooded IoU and all present per-class IoUs every epoch, and writes those metrics to the run history. The default run detects and resumes the latest valid local checkpoint. `--epochs` is the desired total epoch, not the number of additional epochs.
+Training saves `floodnet_unet_last.pth` after each epoch, updates `floodnet_unet_best.pth` when validation mIoU improves, and separately saves `floodnet_unet_best_road_flooded.pth` when Road-flooded IoU improves. It logs Road-flooded IoU and all present per-class IoUs every epoch and writes those metrics to the run history. The default run detects and resumes the latest valid local checkpoint. `--epochs` is the desired total epoch, not the number of additional epochs.
 
 ```bash
 python -m src.train --epochs 15

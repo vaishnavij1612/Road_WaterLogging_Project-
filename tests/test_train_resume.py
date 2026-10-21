@@ -54,6 +54,8 @@ class TestTrainResumePipeline(unittest.TestCase):
             checkpoint_dir=self.checkpoint_dir,
             drive_dir=self.drive_dir,
             is_best=True,
+            best_road_flooded_iou=0.31,
+            is_best_road_flooded=True,
         )
 
         # Check local files exist
@@ -67,6 +69,7 @@ class TestTrainResumePipeline(unittest.TestCase):
         drive_best = self.drive_dir / "floodnet_unet_best.pth"
         self.assertTrue(drive_last.exists())
         self.assertTrue(drive_best.exists())
+        self.assertTrue((self.drive_dir / "floodnet_unet_best_road_flooded.pth").exists())
 
         # Inspect checkpoint contents
         ckpt = torch.load(drive_last, map_location="cpu", weights_only=False)
@@ -82,6 +85,7 @@ class TestTrainResumePipeline(unittest.TestCase):
 
         self.assertEqual(ckpt["epoch"], 2)
         self.assertEqual(ckpt["best_miou"], 0.65)
+        self.assertEqual(ckpt["best_road_flooded_iou"], 0.31)
         self.assertEqual(ckpt["patience_counter"], 1)
         self.assertEqual(len(ckpt["history"]), 2)
         self.assertEqual(ckpt["history"][1]["mIoU"], 0.65)
