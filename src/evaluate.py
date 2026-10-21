@@ -1,155 +1,114 @@
-"""
-evaluate.py
-===========
-Rigorous evaluation and metrics generation for road waterlogging models.
+"""Evaluate a FloodNet U-Net on validation or the held-out test split."""
 
-Academic Integrity Guarantees:
-- Never generates synthetic or hardcoded metrics.
-- Every metric (Accuracy, Precision, Recall, F1, IoU, Dice) is computed directly
-  from ground-truth and model prediction tensors.
-- Generates real confusion matrix heatmaps and training curves.
-"""
-
-import os
+import argparse
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+
 import numpy as np
 import torch
-import torch.nn as nn
+from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    classification_report
-)
-import matplotlib.pyplot as plt
+
+from src.config import BASE_DIR, FLOODNET_CLASSES, FLOODNET_DIR, FLOODNET_COLOR_MAP, MODELS_DIR, NUM_CLASSES, OUTPUTS_DIR, REPORTS_DIR
+from src.dataset_loader import FloodNetDataset
+from src.predict import FloodNetPredictor
+from src.preprocessing import DualSegmentationTransform
 
 
-def evaluate_classifier(
-    model: nn.Module,
-    data_loader: DataLoader,
-    device: torch.device,
-    class_names: List[str] = None
-) -> Dict[str, Any]:
-    """
-    Evaluate classification model on a dataset.
-    Returns dictionary with real metrics, confusion matrix, and classification report.
-    """
-    model.eval()
-    all_preds = []
-    all_targets = []
-    all_probs = []
+@torch.inference_mode()
+def evaluate_split(predictor: FloodNetPredictor, dataset_dir: Path, split: str, batch_size: int = 4, save_samples: int = 3):
+    transform = DualSegmentationTransform(img_size=predictor.input_size, is_training=False)
+    dataset = FloodNetDataset(dataset_dir, split=split, dual_transform=transform)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    confusion = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.int64)
 
-    with torch.no_grad():
-        for images, targets in data_loader:
-            images = images.to(device)
-            outputs = model(images)
-            probs = torch.softmax(outputs, dim=1)
-            preds = torch.argmax(probs, dim=1)
+    for images, targets, _ in loader:
+        logits = predictor.model(images.to(predictor.device))
+        predictions = logits.argmax(dim=1).cpu().numpy()
+        targets_np = targets.numpy()
+        valid = (targets_np >= 0) & (targets_np < NUM_CLASSES)
+        bins = np.bincount(
+            (targets_np[valid] * NUM_CLASSES + predictions[valid]).ravel(),
+            minlength=NUM_CLASSES * NUM_CLASSES,
+        )
+        confusion += bins.reshape(NUM_CLASSES, NUM_CLASSES)
 
-            all_preds.extend(preds.cpu().numpy().tolist())
-            all_targets.extend(targets.numpy().tolist())
-            all_probs.extend(probs.cpu().numpy().tolist())
-
-    y_true = np.array(all_targets)
-    y_pred = np.array(all_preds)
-
-    acc = float(accuracy_score(y_true, y_pred))
-    prec = float(precision_score(y_true, y_pred, average="weighted", zero_division=0))
-    rec = float(recall_score(y_true, y_pred, average="weighted", zero_division=0))
-    f1 = float(f1_score(y_true, y_pred, average="weighted", zero_division=0))
-    cm = confusion_matrix(y_true, y_pred).tolist()
-
-    target_names = class_names if class_names else [f"Class_{i}" for i in sorted(list(set(y_true)))]
-    report = classification_report(y_true, y_pred, target_names=target_names, zero_division=0, output_dict=True)
-
-    results = {
-        "accuracy": round(acc, 4),
-        "precision": round(prec, 4),
-        "recall": round(rec, 4),
-        "f1_score": round(f1, 4),
-        "confusion_matrix": cm,
-        "classification_report": report,
-        "sample_count": len(y_true)
+    true_positive = np.diag(confusion)
+    union = confusion.sum(0) + confusion.sum(1) - true_positive
+    ious = [float(true_positive[i] / union[i]) if union[i] else None for i in range(NUM_CLASSES)]
+    present = [value for value in ious if value is not None]
+    total = int(confusion.sum())
+    try:
+        checkpoint_reference = predictor.checkpoint_path.relative_to(BASE_DIR).as_posix()
+    except ValueError:
+        checkpoint_reference = predictor.checkpoint_path.name
+    metrics = {
+        "split": split,
+        "sample_count": len(dataset),
+        "mIoU": float(np.mean(present)) if present else 0.0,
+        "pixel_accuracy": float(true_positive.sum() / total) if total else 0.0,
+        "per_class_iou": {FLOODNET_CLASSES[i]: ious[i] for i in range(NUM_CLASSES)},
+        "road_flooded_iou": ious[3] or 0.0,
+        "road_non_flooded_iou": ious[4] or 0.0,
+        "water_iou": ious[5] or 0.0,
+        "road_flooded_true_pixels": int(confusion[3].sum()),
+        "road_flooded_predicted_pixels": int(confusion[:, 3].sum()),
+        "confusion_matrix": confusion.tolist(),
+        "checkpoint": checkpoint_reference,
+        "checkpoint_epoch": predictor.checkpoint_metadata.get("epoch"),
+        "checkpoint_best_validation_miou": predictor.checkpoint_metadata.get("best_miou"),
+        "input_size": list(predictor.input_size),
     }
 
-    return results
+    if save_samples:
+        out_dir = OUTPUTS_DIR / "visualizations"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for index in range(min(save_samples, len(dataset))):
+            image_path, mask_path = dataset.samples[index]
+            prediction = predictor.predict(image_path)
+            with Image.open(mask_path) as source_mask:
+                gt = source_mask.convert("L").resize(prediction["original_image"].size, Image.Resampling.NEAREST)
+            gt_arr = np.asarray(gt, dtype=np.uint8)
+            gt_rgb = np.zeros((*gt_arr.shape, 3), dtype=np.uint8)
+            for class_id, color in FLOODNET_COLOR_MAP.items():
+                gt_rgb[gt_arr == class_id] = color
+            gt_image = Image.fromarray(gt_rgb, "RGB")
+            original = prediction["original_image"]
+            pred_image = prediction["mask_image"]
+            original.thumbnail((640, 480), Image.Resampling.BILINEAR)
+            display_size = original.size
+            gt_image = gt_image.resize(display_size, Image.Resampling.NEAREST)
+            pred_image = pred_image.resize(display_size, Image.Resampling.NEAREST)
+            panel = Image.new("RGB", (original.width * 3, original.height + 36), "white")
+            panel.paste(original, (0, 36))
+            panel.paste(gt_image, (original.width, 36))
+            panel.paste(pred_image, (original.width * 2, 36))
+            draw = ImageDraw.Draw(panel)
+            for x, label in [(0, "Original"), (original.width, "Ground truth"), (original.width * 2, "Prediction")]:
+                draw.text((x + 8, 10), label, fill="black")
+            panel.save(out_dir / f"{split}_comparison_{index + 1}.png")
+
+    return metrics
 
 
-def plot_confusion_matrix(
-    cm: List[List[int]],
-    class_names: List[str],
-    output_path: str or Path = "outputs/graphs/confusion_matrix.png",
-    title: str = "Road Waterlogging Confusion Matrix"
-) -> None:
-    """Plot and save publication-quality confusion matrix."""
-    output_path = Path(output_path).resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--checkpoint", type=Path, default=MODELS_DIR / "floodnet_unet_best.pth")
+    parser.add_argument("--dataset-dir", type=Path, default=FLOODNET_DIR)
+    parser.add_argument("--split", choices=["val", "test"], default="val")
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--samples", type=int, default=3)
+    parser.add_argument("--output", type=Path, default=None)
+    args = parser.parse_args()
 
-    cm_arr = np.array(cm)
-    fig, ax = plt.subplots(figsize=(6, 5), dpi=300)
-    cax = ax.matshow(cm_arr, cmap="Blues")
-    fig.colorbar(cax)
-
-    ax.set_xticks(range(len(class_names)))
-    ax.set_yticks(range(len(class_names)))
-    ax.set_xticklabels(class_names, rotation=45, ha="left")
-    ax.set_yticklabels(class_names)
-
-    # Annotate cells with integer counts
-    for i in range(len(class_names)):
-        for j in range(len(class_names)):
-            val = cm_arr[i, j]
-            color = "white" if val > cm_arr.max() / 2 else "black"
-            ax.text(j, i, str(val), va="center", ha="center", color=color, fontweight="bold")
-
-    ax.set_xlabel("Predicted Label", fontweight="bold")
-    ax.set_ylabel("True Label", fontweight="bold")
-    ax.set_title(title, pad=20, fontweight="bold")
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
+    predictor = FloodNetPredictor(args.checkpoint)
+    result = evaluate_split(predictor, args.dataset_dir, args.split, args.batch_size, args.samples)
+    output = args.output or REPORTS_DIR / f"evaluation_{args.split}.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps({key: value for key, value in result.items() if key != "confusion_matrix"}, indent=2))
+    print(f"Full metrics saved to {output}")
 
 
-def plot_training_history(
-    history: Dict[str, List[float]],
-    output_path: str or Path = "outputs/graphs/training_curves.png"
-) -> None:
-    """
-    Plot and save training and validation loss and accuracy curves.
-    """
-    output_path = Path(output_path).resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    epochs = range(1, len(history.get("train_loss", [])) + 1)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5), dpi=300)
-
-    # Loss subplot
-    if "train_loss" in history:
-        ax1.plot(epochs, history["train_loss"], label="Train Loss", marker="o", color="#3B82F6")
-    if "val_loss" in history:
-        ax1.plot(epochs, history["val_loss"], label="Val Loss", marker="s", color="#EF4444")
-    ax1.set_xlabel("Epoch", fontweight="bold")
-    ax1.set_ylabel("Loss", fontweight="bold")
-    ax1.set_title("Training & Validation Loss", fontweight="bold")
-    ax1.grid(True, linestyle="--", alpha=0.6)
-    ax1.legend()
-
-    # Accuracy subplot
-    if "train_acc" in history:
-        ax2.plot(epochs, history["train_acc"], label="Train Acc", marker="o", color="#10B981")
-    if "val_acc" in history:
-        ax2.plot(epochs, history["val_acc"], label="Val Acc", marker="s", color="#F59E0B")
-    ax2.set_xlabel("Epoch", fontweight="bold")
-    ax2.set_ylabel("Accuracy", fontweight="bold")
-    ax2.set_title("Training & Validation Accuracy", fontweight="bold")
-    ax2.grid(True, linestyle="--", alpha=0.6)
-    ax2.legend()
-
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
+if __name__ == "__main__":
+    main()

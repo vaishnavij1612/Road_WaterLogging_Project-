@@ -24,17 +24,18 @@ ENV/
 # Jupyter
 # -------------------------------------------------------
 .ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+wandb/
+lightning_logs/
 
 # -------------------------------------------------------
 # FloodNet Dataset — NEVER UPLOAD (too large, ~20+ GB)
 # -------------------------------------------------------
 floodnet_dataset/
 dataset/
-FloodNet.zip
-floodnet_val.zip
-floodnet_train_part1.zip
-floodnet_train_part2.zip
-floodnet_train_part3.zip
+*.zip
 *.crdownload
 
 # -------------------------------------------------------
@@ -72,6 +73,12 @@ Road_Waterlogging_Source.zip
 *.tmp
 *.temp
 *.log
+logs/
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
 
 # -------------------------------------------------------
 # IDE / OS metadata

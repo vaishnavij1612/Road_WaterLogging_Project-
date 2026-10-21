@@ -124,14 +124,27 @@ class FloodNetDataset(Dataset):
             )
 
         # Build matched list of image and mask paths
-        org_files = sorted(list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.png")))
-        lbl_map = {f.stem.replace("_lab", ""): f for f in lbl_dir.glob("*.png")}
+        org_files = sorted(
+            f for f in img_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        )
+        lbl_map = {f.stem.replace("_lab", ""): f for f in lbl_dir.iterdir() if f.is_file() and f.suffix.lower() == ".png"}
 
         self.samples = []
         for img_p in org_files:
             stem = img_p.stem
             if stem in lbl_map:
                 self.samples.append((img_p, lbl_map[stem]))
+
+        unmatched_images = sorted(f.name for f in org_files if f.stem not in lbl_map)
+        unmatched_masks = sorted(
+            f.name for stem, f in lbl_map.items() if stem not in {image.stem for image in org_files}
+        )
+        if unmatched_images or unmatched_masks:
+            raise ValueError(
+                f"FloodNet {split} image/mask mismatch: {len(unmatched_images)} images without masks, "
+                f"{len(unmatched_masks)} masks without images."
+            )
 
         if not self.samples:
             raise ValueError(f"No matched image-mask pairs found in FloodNet {split} set.")
@@ -318,8 +331,8 @@ def build_floodnet_dataloaders(
                 test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=False
             )
             test_count = len(test_ds)
-        except Exception:
-            pass
+        except Exception as exc:
+            raise ValueError(f"Could not load FloodNet test split: {exc}") from exc
 
     train_loader = DataLoader(
         train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=False

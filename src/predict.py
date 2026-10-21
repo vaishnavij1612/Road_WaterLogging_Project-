@@ -1,201 +1,127 @@
-"""
-predict.py
-==========
-End-to-end inference pipeline for road waterlogging detection and severity estimation.
+"""FloodNet U-Net inference used by the Streamlit application and CLI."""
 
-Workflow:
-Input Image
-    ↓
-Image Preprocessing
-    ↓
-Deep Learning Model (MobileNetV2 / ResNet)
-    ↓
-Waterlogging Detection & Confidence Score
-    ↓
-Region Localization (Grad-CAM or Semantic Mask)
-    ↓
-Affected Area Percentage Calculation
-    ↓
-Severity Estimation (Transparent, documented rule)
-    ↓
-Result Visualization & Heatmap Overlay
-"""
-
-import os
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional, Union
+from typing import Any, Dict, Optional, Union
+
 import numpy as np
-from PIL import Image
 import torch
-import matplotlib.cm as cm
+from PIL import Image
 
-from src.model import WaterloggingClassifier, get_device
+from src.config import (
+    FLOODNET_CLASSES,
+    FLOODNET_COLOR_MAP,
+    IMG_SIZE,
+    MODELS_DIR,
+    NUM_CLASSES,
+)
 from src.preprocessing import get_classification_transforms
-from src.segmentation import GradCAM, calculate_affected_area
-from src.severity import SeverityEstimator
+from src.segmentation import UNet, calculate_floodnet_road_severity
 
 
-class WaterloggingPredictor:
-    """
-    Production-ready inference pipeline combining detection, explainable localization,
-    affected area estimation, and severity assessment.
-    """
+class FloodNetPredictor:
+    """Load a trained FloodNet checkpoint once and predict per-pixel classes."""
 
-    def __init__(self, model_checkpoint_path: str = "models/best_waterlogging_model.pt"):
-        self.device = get_device()
-        self.checkpoint_path = Path(model_checkpoint_path).resolve()
-        self.model: Optional[WaterloggingClassifier] = None
-        self.class_names = ["normal", "waterlogged"]
-        self.severity_estimator = SeverityEstimator()
-        self.transform = get_classification_transforms(img_size=(224, 224), is_training=False)
-        self.grad_cam: Optional[GradCAM] = None
-
-        if self.checkpoint_path.exists():
-            self._load_model()
-        else:
-            print(f"Warning: Checkpoint not found at {self.checkpoint_path}. Model must be initialized before inference.")
-
-    def _load_model(self) -> None:
-        """Load trained model weights from disk."""
-        checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
-        backbone = checkpoint.get("backbone", "mobilenet_v2")
-        num_classes = checkpoint.get("num_classes", 2)
-        self.class_names = checkpoint.get("class_names", ["normal", "waterlogged"])
-
-        self.model = WaterloggingClassifier(
-            backbone_name=backbone,
-            num_classes=num_classes,
-            pretrained=False
-        )
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.model.to(self.device)
-        self.model.eval()
-
-        # Target layer for Grad-CAM explainability
-        if backbone == "mobilenet_v2":
-            target_layer = self.model.backbone[-1]
-        elif backbone in ["resnet18", "resnet50"]:
-            target_layer = self.model.backbone[-1][-1]
-        elif backbone == "efficientnet_b0":
-            target_layer = self.model.backbone[-1]
-        else:
-            target_layer = list(self.model.backbone.children())[-1]
-
-        self.grad_cam = GradCAM(self.model, target_layer)
-        print(f"Loaded {backbone} model from {self.checkpoint_path} on {self.device}")
-
-    def predict(
+    def __init__(
         self,
-        image_input: Union[str, Path, Image.Image],
-        detection_threshold: float = 0.50
-    ) -> Dict[str, Any]:
-        """
-        Run inference on an input image.
-        
-        Args:
-            image_input: Path string or PIL Image object.
-            detection_threshold: Probability threshold for positive waterlogging.
-            
-        Returns:
-            Dictionary containing:
-            - is_waterlogged: bool
-            - detection_status: "DETECTED" or "NOT DETECTED"
-            - confidence_pct: float
-            - class_probabilities: Dict[str, float]
-            - affected_area_pct: float
-            - severity: Dict (level, color, explanation)
-            - overlay_image: PIL Image (original with localized water heatmap overlay)
-            - heatmap_array: numpy 2D array
-        """
-        if self.model is None:
-            raise RuntimeError(
-                f"Model weights not loaded. Expected checkpoint at {self.checkpoint_path}."
-            )
+        model_checkpoint_path: Union[str, Path] = MODELS_DIR / "floodnet_unet_best.pth",
+        device: Optional[torch.device] = None,
+    ) -> None:
+        self.checkpoint_path = Path(model_checkpoint_path).expanduser().resolve()
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if not self.checkpoint_path.is_file():
+            raise FileNotFoundError(f"FloodNet checkpoint not found: {self.checkpoint_path}")
 
-        # 1. Load image
-        if isinstance(image_input, (str, Path)):
-            pil_img = Image.open(image_input).convert("RGB")
-        else:
-            pil_img = image_input.convert("RGB")
+        try:
+            checkpoint = torch.load(self.checkpoint_path, map_location=self.device, weights_only=False)
+        except Exception as exc:
+            raise ValueError(f"Could not read checkpoint {self.checkpoint_path}: {exc}") from exc
 
-        orig_w, orig_h = pil_img.size
+        if not isinstance(checkpoint, dict):
+            raise ValueError("Checkpoint must be a dictionary containing model_state_dict and configuration.")
+        state = checkpoint.get("model_state_dict")
+        if not isinstance(state, dict):
+            raise ValueError("Checkpoint does not contain a model_state_dict; expected a FloodNet U-Net checkpoint.")
 
-        # 2. Preprocess
-        tensor = self.transform(pil_img).unsqueeze(0).to(self.device)
+        config = checkpoint.get("config") or {}
+        inferred_classes = int(state.get("out_conv.weight", torch.empty(NUM_CLASSES)).shape[0])
+        num_classes = int(config.get("num_classes", inferred_classes))
+        base_features = int(config.get("base_features", state["enc1.block.0.weight"].shape[0]))
+        if num_classes != NUM_CLASSES:
+            raise ValueError(f"Expected a {NUM_CLASSES}-class FloodNet model; checkpoint declares {num_classes} classes.")
 
-        # 3. Model Inference
-        with torch.no_grad():
-            logits = self.model(tensor)
-            probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
-
-        # Determine index of waterlogged class
-        water_idx = 1
-        for i, name in enumerate(self.class_names):
-            if "water" in name.lower() or "flood" in name.lower():
-                water_idx = i
-                break
-
-        water_prob = float(probs[water_idx]) if len(probs) > 1 else float(probs[0])
-        is_waterlogged = water_prob >= detection_threshold
-
-        detection_status = "DETECTED" if is_waterlogged else "NOT DETECTED"
-        confidence_pct = round(water_prob * 100.0, 1) if is_waterlogged else round((1.0 - water_prob) * 100.0, 1)
-
-        # Class probabilities mapping
-        class_probs = {
-            self.class_names[i]: round(float(probs[i]) * 100.0, 2)
-            for i in range(len(self.class_names))
+        self.input_size = tuple(config.get("img_size", IMG_SIZE))
+        self.model = UNet(in_channels=3, num_classes=num_classes, base_features=base_features).to(self.device)
+        try:
+            self.model.load_state_dict(state, strict=True)
+        except Exception as exc:
+            raise ValueError(f"Checkpoint weights do not match the configured U-Net architecture: {exc}") from exc
+        self.model.eval()
+        self.transform = get_classification_transforms(img_size=self.input_size, is_training=False)
+        self.checkpoint_metadata = {
+            "epoch": checkpoint.get("epoch"),
+            "best_miou": checkpoint.get("best_miou"),
+            "val_metrics": checkpoint.get("val_metrics", {}),
+            "config": config,
         }
 
-        # 4. Explainable Visual Attribution via Grad-CAM (Qualitative Attribution Only)
-        heatmap = self.grad_cam.generate(tensor, target_class=water_idx)
-        heatmap_resized = Image.fromarray((heatmap * 255).astype(np.uint8)).resize(
-            (orig_w, orig_h), Image.Resampling.BILINEAR
-        )
-        heatmap_np = np.array(heatmap_resized) / 255.0
+    @torch.inference_mode()
+    def predict(self, image_input: Union[str, Path, Image.Image]) -> Dict[str, Any]:
+        """Return original-size class mask, visualization, and road-only severity."""
+        try:
+            if isinstance(image_input, (str, Path)):
+                with Image.open(image_input) as source:
+                    original = source.convert("RGB")
+            elif isinstance(image_input, Image.Image):
+                original = image_input.convert("RGB")
+            else:
+                raise TypeError("Input must be a filesystem path or PIL image.")
+        except Exception as exc:
+            raise ValueError(f"Could not decode input image: {exc}") from exc
 
-        # 5. Affected Area Calculation
-        # SCIENTIFIC INTEGRITY NOTE:
-        # Grad-CAM highlights coarse convolutional feature activation, NOT pixel-level segmentation boundaries.
-        # True affected area is ONLY calculated when a trained segmentation model or mask is provided.
-        area_info = {
-            "affected_area_pct": None,
-            "calculation_type": "None (Grad-CAM attribution only)",
-            "is_road_specific": False,
-            "note": "Grad-CAM provides qualitative visual attribution of salient regions. Exact pixel-level affected area is not fabricated without segmentation masks."
+        tensor = self.transform(original).unsqueeze(0).to(self.device)
+        logits = self.model(tensor)
+        if logits.ndim != 4 or logits.shape[1] != NUM_CLASSES:
+            raise ValueError(f"Model returned invalid segmentation logits with shape {tuple(logits.shape)}.")
+        low_resolution = logits.argmax(dim=1)[0].to("cpu", dtype=torch.uint8).numpy()
+        mask_image = Image.fromarray(low_resolution, mode="L").resize(original.size, Image.Resampling.NEAREST)
+        mask = np.asarray(mask_image, dtype=np.uint8)
+        severity = calculate_floodnet_road_severity(mask)
+
+        rgb_mask = np.zeros((*mask.shape, 3), dtype=np.uint8)
+        for class_id, color in FLOODNET_COLOR_MAP.items():
+            rgb_mask[mask == class_id] = color
+        colored_mask = Image.fromarray(rgb_mask, mode="RGB")
+
+        overlay_array = np.asarray(original).copy()
+        flooded = mask == 3
+        if flooded.any():
+            tint = np.array(FLOODNET_COLOR_MAP[3], dtype=np.float32)
+            overlay_array[flooded] = (0.45 * overlay_array[flooded] + 0.55 * tint).astype(np.uint8)
+        overlay = Image.fromarray(overlay_array, mode="RGB")
+
+        pixel_counts = np.bincount(mask.ravel(), minlength=NUM_CLASSES)
+        probabilities = {
+            FLOODNET_CLASSES[class_id]: round(float(count / mask.size * 100), 2)
+            for class_id, count in enumerate(pixel_counts)
         }
-        affected_area_pct = 0.0
-
-        # 6. Severity Estimation
-        # If no ground-truth depth/severity labels or segmentation masks are available,
-        # severity is reported based on model confidence and detection status.
-        severity_info = self.severity_estimator.estimate(
-            affected_area_pct=affected_area_pct,
-            waterlogging_detected=is_waterlogged
-        )
-
-        # 7. Visualization Overlay
-        # Apply colormap (jet or ocean) to heatmap
-        colored_cam = cm.get_cmap("turbo")(heatmap_np)[:, :, :3]  # RGB floats [0, 1]
-        colored_cam = (colored_cam * 255).astype(np.uint8)
-        cam_pil = Image.fromarray(colored_cam)
-
-        if is_waterlogged:
-            # Blend original with heatmap
-            overlay_pil = Image.blend(pil_img, cam_pil, alpha=0.45)
-        else:
-            overlay_pil = pil_img.copy()
-
         return {
-            "is_waterlogged": is_waterlogged,
-            "detection_status": detection_status,
-            "confidence_pct": confidence_pct,
-            "water_probability": round(water_prob, 4),
-            "class_probabilities": class_probs,
-            "affected_area_pct": affected_area_pct,
-            "area_details": area_info,
-            "severity": severity_info,
-            "overlay_image": overlay_pil,
-            "heatmap_array": heatmap_np,
-            "original_image": pil_img
+            "predicted_mask": mask,
+            "mask_image": colored_mask,
+            "overlay_image": overlay,
+            "severity": severity,
+            "area_details": {
+                "note": (
+                    "Road flooded pixels divided by predicted flooded plus non-flooded road pixels. "
+                    "Water pixels outside the road are excluded."
+                ),
+                "is_road_specific": severity["is_road_visible"],
+            },
+            "class_probabilities": probabilities,
+            "original_image": original,
+            "checkpoint_metadata": self.checkpoint_metadata,
         }
+
+
+# Keep the old public name as an import-compatible alias; this is now the actual
+# semantic segmentation predictor rather than the unrelated binary classifier.
+WaterloggingPredictor = FloodNetPredictor

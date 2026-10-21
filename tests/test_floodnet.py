@@ -1,84 +1,82 @@
+import tempfile
 import unittest
-import numpy as np
-import torch
 from pathlib import Path
 
+import numpy as np
+import torch
+from PIL import Image
+
 from src.config import FLOODNET_DIR, NUM_CLASSES
-from src.preprocessing import DualSegmentationTransform
 from src.dataset_loader import FloodNetDataset
-from src.segmentation import (
-    UNet,
-    CombinedSegmentationLoss,
-    compute_floodnet_multiclass_metrics,
-    calculate_floodnet_road_severity
-)
+from src.predict import FloodNetPredictor
+from src.preprocessing import DualSegmentationTransform
+from src.segmentation import UNet, CombinedSegmentationLoss, calculate_floodnet_road_severity
 
 
 class TestFloodNetPipeline(unittest.TestCase):
-
-    def setUp(self):
-        self.device = torch.device("cpu")
-
     def test_floodnet_dataset_loading(self):
-        """Verify FloodNet dataset loading and synchronized transformation."""
         if not FLOODNET_DIR.exists():
             self.skipTest("FloodNet dataset directory not present.")
-        
-        tf = DualSegmentationTransform(img_size=(128, 128), is_training=False)
-        ds = FloodNetDataset(FLOODNET_DIR, split="train", dual_transform=tf)
-        self.assertEqual(len(ds), 1445)
-
-        img, msk, fname = ds[0]
-        self.assertEqual(img.shape, (3, 128, 128))
-        self.assertEqual(msk.shape, (128, 128))
-        self.assertEqual(msk.dtype, torch.int64)
+        dataset = FloodNetDataset(
+            FLOODNET_DIR,
+            split="train",
+            dual_transform=DualSegmentationTransform(img_size=(128, 128), is_training=False),
+        )
+        self.assertEqual(len(dataset), 1445)
+        image, mask, _ = dataset[0]
+        self.assertEqual(tuple(image.shape), (3, 128, 128))
+        self.assertEqual(tuple(mask.shape), (128, 128))
+        self.assertEqual(mask.dtype, torch.int64)
+        self.assertTrue(int(mask.min()) >= 0 and int(mask.max()) < NUM_CLASSES)
 
     def test_unet_multiclass_shape(self):
-        """Verify U-Net forward pass outputs correct multi-class tensor shape."""
-        model = UNet(in_channels=3, num_classes=10, base_features=16)
-        x = torch.randn(2, 3, 64, 64)
-        out = model(x)
-        self.assertEqual(out.shape, (2, 10, 64, 64))
+        model = UNet(in_channels=3, num_classes=NUM_CLASSES, base_features=4)
+        output = model(torch.randn(1, 3, 64, 64))
+        self.assertEqual(tuple(output.shape), (1, NUM_CLASSES, 64, 64))
 
-    def test_combined_loss(self):
-        """Verify combined cross-entropy and dice loss calculation."""
+    def test_loss_is_finite_and_updates_gradients(self):
         criterion = CombinedSegmentationLoss()
-        logits = torch.randn(2, 10, 32, 32)
-        targets = torch.randint(0, 10, (2, 32, 32), dtype=torch.long)
+        logits = torch.randn(1, NUM_CLASSES, 32, 32, requires_grad=True)
+        targets = torch.randint(0, NUM_CLASSES, (1, 32, 32), dtype=torch.long)
         loss = criterion(logits, targets)
-        self.assertGreater(loss.item(), 0.0)
+        loss.backward()
+        self.assertTrue(torch.isfinite(loss))
+        self.assertIsNotNone(logits.grad)
+        self.assertTrue(torch.isfinite(logits.grad).all())
 
-    def test_road_severity_formula(self):
-        """
-        Verify waterlogged road percentage and severity tier assignment:
-        Formula: Road-flooded / (Road-flooded + Road-dry) * 100%
-        """
-        # Test 1: 0% Flooded (Dry Road)
-        mask_dry = np.full((100, 100), 4, dtype=np.int64) # All Road-non-flooded
-        sev_dry = calculate_floodnet_road_severity(mask_dry)
-        self.assertEqual(sev_dry["severity_level"], "NONE")
-        self.assertEqual(sev_dry["road_waterlogged_pct"], 0.0)
+    def test_severity_rules_and_road_only_denominator(self):
+        cases = [(1, "NONE"), (30, "LOW"), (80, "MODERATE"), (81, "SEVERE")]
+        for flooded, expected in cases:
+            mask = np.full(220, 4, dtype=np.uint8)
+            mask[:flooded] = 3
+            mask[-20:] = 5  # water outside road must be excluded
+            result = calculate_floodnet_road_severity(mask)
+            self.assertEqual(result["severity_level"], expected)
+        self.assertEqual(calculate_floodnet_road_severity(np.full(200, 4))["road_waterlogged_pct"], 0.0)
+        self.assertEqual(calculate_floodnet_road_severity(np.full(200, 3))["road_waterlogged_pct"], 100.0)
 
-        # Test 2: 10% Flooded (Low)
-        mask_low = np.full((100, 100), 4, dtype=np.int64)
-        mask_low[:10, :] = 3 # 1000 pixels flooded, 9000 dry = 10%
-        sev_low = calculate_floodnet_road_severity(mask_low)
-        self.assertEqual(sev_low["severity_level"], "LOW")
-        self.assertEqual(sev_low["road_waterlogged_pct"], 10.0)
+    def test_no_road_is_unavailable(self):
+        result = calculate_floodnet_road_severity(np.full((20, 20), 5, dtype=np.uint8))
+        self.assertEqual(result["severity_level"], "UNAVAILABLE")
+        self.assertIsNone(result["road_waterlogged_pct"])
 
-        # Test 3: 30% Flooded (Moderate)
-        mask_mod = np.full((100, 100), 4, dtype=np.int64)
-        mask_mod[:30, :] = 3 # 3000 pixels flooded, 7000 dry = 30%
-        sev_mod = calculate_floodnet_road_severity(mask_mod)
-        self.assertEqual(sev_mod["severity_level"], "MODERATE")
-        self.assertEqual(sev_mod["road_waterlogged_pct"], 30.0)
-
-        # Test 4: 60% Flooded (Severe)
-        mask_sev = np.full((100, 100), 4, dtype=np.int64)
-        mask_sev[:60, :] = 3 # 6000 pixels flooded, 4000 dry = 60%
-        sev_sev = calculate_floodnet_road_severity(mask_sev)
-        self.assertEqual(sev_sev["severity_level"], "SEVERE")
-        self.assertEqual(sev_sev["road_waterlogged_pct"], 60.0)
+    def test_checkpoint_to_prediction_workflow(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkpoint_path = Path(temp_dir) / "minimal.pth"
+            model = UNet(in_channels=3, num_classes=NUM_CLASSES, base_features=2)
+            torch.save({
+                "model_state_dict": model.state_dict(),
+                "config": {"num_classes": NUM_CLASSES, "base_features": 2, "img_size": [32, 32]},
+                "epoch": 1,
+                "best_miou": 0.1,
+                "val_metrics": {"road_flooded_iou": 0.0},
+            }, checkpoint_path)
+            predictor = FloodNetPredictor(checkpoint_path, device=torch.device("cpu"))
+            result = predictor.predict(Image.new("RGB", (96, 64), color=(40, 80, 120)))
+            self.assertEqual(result["predicted_mask"].shape, (64, 96))
+            self.assertEqual(result["mask_image"].size, (96, 64))
+            self.assertEqual(result["overlay_image"].size, (96, 64))
+            self.assertEqual(result["checkpoint_metadata"]["epoch"], 1)
 
 
 if __name__ == "__main__":

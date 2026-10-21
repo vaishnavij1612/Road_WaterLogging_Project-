@@ -1,309 +1,142 @@
-# AI-Based Road Waterlogging Detection and Severity Estimation Using Deep Learning
+# AI-Based Road Waterlogging Detection
 
-A technically rigorous Deep Learning project for automated detection, spatial localization, affected-area estimation, and severity categorization of road waterlogging events using the **FloodNet** aerial-imagery dataset and a **U-Net** semantic segmentation model.
+This repository contains a ten-class U-Net segmentation project for FloodNet Supervised v1.0. It predicts a class for each pixel, calculates flooded-road coverage from FloodNet classes 3 and 4, and applies project-defined coverage bands. The bands are not FloodNet labels and do not measure water depth.
 
----
+## Pipeline
 
-## 1. Project Title
-**AI-Based Road Waterlogging Detection and Severity Estimation Using Deep Learning**
+1. Load an RGB road/aerial image and resize it to 256 × 256.
+2. Normalize RGB channels with ImageNet mean and standard deviation.
+3. Run the FloodNet U-Net and take the per-pixel class argmax.
+4. Calculate `Road-flooded / (Road-flooded + Road-non-flooded) × 100`.
+5. Map the percentage to a project-defined tier.
 
----
+| Class ID | FloodNet class |
+|---:|---|
+| 3 | Road-flooded |
+| 4 | Road-non-flooded |
+| 5 | Water |
 
-## 2. Problem Statement
-Urban road waterlogging caused by heavy precipitation and inadequate stormwater drainage leads to traffic paralysis, vehicular damage, accidents, and life-threatening urban flooding. Traditional monitoring relies on manual visual inspections or costly in-situ physical depth sensors installed at fixed locations, which cannot provide widespread, real-time spatial coverage across entire city road networks.
+| Tier | Flooded road coverage |
+|---|---:|
+| NONE | ≤ 0.5% |
+| LOW | > 0.5% to 15% |
+| MODERATE | > 15% to 40% |
+| SEVERE | > 40% |
 
----
+If the model predicts no road pixels, percentage and severity are reported as unavailable. Water classified outside the road is excluded from the road denominator.
 
-## 3. Motivation
-Cameras (traffic CCTV, dashcams, smartphones, aerial drones) are already omnipresent in modern smart cities. Developing automated deep-learning algorithms capable of analyzing optical imagery enables early flood alerting, dynamic route replanning, and automated hazard grading without expensive dedicated hardware.
+## Repository and data
 
----
+The default FloodNet path is `floodnet_dataset/FloodNet-Supervised_v1.0/`:
 
-## 4. Project Pipeline
-
-```
-Input road/aerial image
-        │
-        ▼
-   Preprocessing
-  (resize 256×256,
-   ImageNet normalize)
-        │
-        ▼
- U-Net Semantic Segmentation
-  (10-class FloodNet taxonomy)
-        │
-        ▼
- Road-flooded region extraction
-  (Class 3: Road-flooded,
-   Class 4: Road-non-flooded,
-   Class 5: Water)
-        │
-        ▼
- Flooded-road area percentage
-  = flooded_road_pixels /
-    total_road_pixels × 100
-        │
-        ▼
- Project-defined Severity Tier
-  (NONE / LOW / MODERATE / SEVERE)
-        │
-        ▼
- Streamlit Web Application output
+```text
+floodnet_dataset/FloodNet-Supervised_v1.0/
+├── train/{train-org-img,train-label-img}/
+├── val/{val-org-img,val-label-img}/
+└── test/{test-org-img,test-label-img}/
 ```
 
----
+The ignored local dataset in the original developer workspace was verified to contain all 2,343 images: 1,445 train, 450 validation, and 448 test image/mask pairs. The masks are single-channel class-ID images. Dataset files and archives are not part of Git. Obtain FloodNet from the [official FloodNet Supervised v1.0 repository](https://github.com/BinaLab/FloodNet-Supervised_v1.0), which identifies the Community Data License Agreement (permissive), and follow its terms. Please cite Rahnemoonfar et al., “FloodNet: A High Resolution Aerial Imagery Dataset for Post Flood Scene Understanding,” IEEE Access, 2021, DOI: 10.1109/ACCESS.2021.3090981. Extract it to the structure above.
 
-## 5. Model Architecture
+`dataset/` is a separate legacy collection of flood-scene photographs with object annotations, not the FloodNet semantic masks used for segmentation. Its analysis files under `reports/dataset_analysis.md` and `reports/dataset_summary.json` do not describe the training corpus for this U-Net.
 
-### U-Net (Semantic Segmentation)
-- **Architecture:** Classic encoder–decoder U-Net with skip connections.
-- **Input:** 256 × 256 RGB image.
-- **Output:** 10-class per-pixel segmentation mask (FloodNet taxonomy).
-- **Parameters:** ~31,038,218 trainable parameters.
-- **Loss:** Cross-entropy (with optional weighted/Dice variants in `train.py`).
-- **Framework:** PyTorch.
+## Environment setup
 
-### FloodNet Class Taxonomy (10 Classes)
-| Class ID | Label | Relevance |
-| :---: | :--- | :--- |
-| 0 | Background | — |
-| 1 | Building-flooded | Context |
-| 2 | Building-non-flooded | Context |
-| **3** | **Road-flooded** | ✅ Primary target |
-| **4** | **Road-non-flooded** | ✅ Primary target |
-| **5** | **Water** | ✅ Primary target |
-| 6 | Tree | — |
-| 7 | Vehicle | — |
-| 8 | Pool | — |
-| 9 | Grass | — |
+Use Python 3.10–3.12 and install a PyTorch build appropriate for the machine (CPU works for inference and small checks; CUDA is recommended for training). Then install the project dependencies:
 
----
-
-## 6. Severity Estimation
-
-Severity is categorized using transparent, documented surface-coverage thresholds (project-defined; no physical water-depth sensor is required):
-
-| Severity Tier | Flooded-Road Area | Operational Impact |
-| :--- | :--- | :--- |
-| **NONE / DRY** | 0.0% | Road dry, normal traffic. |
-| **LOW** | 0.1% – 15.0% | Minor puddles; passable with caution. |
-| **MODERATE** | 15.1% – 40.0% | Significant accumulation; aquaplaning risk. |
-| **SEVERE** | > 40.0% | Extensive submergence; road impassable. |
-
----
-
-## 7. Dataset — FloodNet (NOT included in this repository)
-
-> ⚠️ **The FloodNet dataset is NOT included in this GitHub repository because of its large size (~20+ GB).**
-
-### Obtaining the Dataset
-The **FloodNet-Supervised v1.0** dataset is publicly available:
-
-- **Official source:** [https://github.com/BinaLab/FloodNet-Supervised_v1.0](https://github.com/BinaLab/FloodNet-Supervised_v1.0)
-- **IEEE DataPort / Zenodo:** Search for "FloodNet Supervised v1.0".
-
-### Expected Local Structure After Download
-Place the extracted dataset at the following path relative to the project root:
-
-```
-Road_Waterlogging_Project/
-└── floodnet_dataset/
-    ├── FloodNet-Supervised_v1.0/
-    │   ├── train/
-    │   │   ├── train-org-img/
-    │   │   └── train-label-img/
-    │   ├── val/
-    │   │   ├── val-org-img/
-    │   │   └── val-label-img/
-    │   └── test/
-    │       └── test-org-img/
-    └── ColorMasks-FloodNetv1.0/
-```
-
-This path is pre-configured in [`src/config.py`](src/config.py).
-
----
-
-## 8. Project Structure
-
-```
-Road_Waterlogging_Project/
-├── src/
-│   ├── config.py            # Central configuration (paths, hyperparameters, class map)
-│   ├── data_inspection.py   # Dataset analyzer & report generator
-│   ├── extract_dataset.py   # Dataset extraction helper
-│   ├── preprocessing.py     # Resizing, normalization, joint augmentations
-│   ├── dataset_loader.py    # PyTorch DataLoader (train/val/test splits)
-│   ├── model.py             # U-Net architecture definition
-│   ├── train.py             # Training loop with checkpointing & early stopping
-│   ├── evaluate.py          # Evaluation (mIoU, pixel accuracy, per-class IoU)
-│   ├── predict.py           # End-to-end inference & visualization pipeline
-│   ├── segmentation.py      # Segmentation utilities, area calculation
-│   ├── severity.py          # Severity estimation logic
-│   └── utils.py             # Shared utilities
-├── notebooks/
-│   ├── FloodNet_UNet_Training.ipynb        # Colab-compatible training notebook
-│   └── exploration_and_experiments.ipynb   # Exploratory analysis
-├── tests/
-│   ├── test_pipeline.py       # End-to-end pipeline tests
-│   ├── test_floodnet.py       # FloodNet dataset loader tests
-│   └── test_train_resume.py   # Checkpoint resume tests
-├── outputs/
-│   ├── graphs/          # Training curves, confusion matrices (generated)
-│   ├── masks/           # Segmentation mask outputs (generated)
-│   ├── predictions/     # Prediction overlay images (generated)
-│   └── visualizations/  # Additional visualizations (generated)
-├── reports/
-│   ├── dataset_analysis.md    # Dataset inspection findings
-│   ├── dataset_summary.json   # Machine-readable dataset summary
-│   └── training_history.json  # Partial training history (3 epochs)
-├── models/              # Model checkpoints — excluded from Git (see .gitignore)
-├── app.py               # Streamlit web application
-├── requirements.txt     # Python dependencies
-├── .gitignore           # Git exclusion rules
-└── README.md            # This file
-```
-
----
-
-## 9. Current Training Status
-
-> ⚠️ **Training is currently incomplete / in progress.**
-
-A partial training run of **3 epochs** was completed on the FloodNet dataset:
-
-| Epoch | Train Loss | Val Loss | mIoU | Pixel Accuracy |
-| :---: | :---: | :---: | :---: | :---: |
-| 1 | 1.3076 | 1.2867 | 0.1789 | 53.2% |
-| 2 | 1.1347 | 1.1596 | 0.2072 | 56.7% |
-| 3 | 1.0841 | 1.0947 | 0.1933 | 56.7% |
-
-- Best mIoU after 3 epochs: **0.2072** (epoch 2).
-- `road_flooded_iou` = **0.0** at this stage — the model has not yet learned the flooded-road class (expected; this class is rare and requires more training epochs + class weighting).
-- Full training requires a GPU and the complete FloodNet dataset. Recommended: ≥15 epochs on a GPU (Google Colab A100 or local CUDA GPU).
-- Model checkpoint files (`models/*.pth`) are **not included** in this repository due to size (~89 MB each). They must be generated by running training locally.
-
----
-
-## 10. Installation
-
-### Prerequisites
-- Python 3.9+
-- CUDA-capable GPU recommended for training (CPU inference is supported but slow)
-
-### Install Dependencies
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-For GPU support with PyTorch, visit [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) and install the appropriate CUDA version.
+Check the selected runtime:
 
----
-
-## 11. Usage
-
-### Dataset Inspection
-Inspect dataset structure, verify splits, and generate analysis reports:
 ```bash
-python -m src.data_inspection --dataset-dir floodnet_dataset/FloodNet-Supervised_v1.0 --output-dir reports
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-### Training
-Train the U-Net model on FloodNet (requires dataset and GPU):
+Set `FLOODNET_DIR` to use a dataset elsewhere. `ROAD_WATERLOGGING_DATASET_DIR`, `FLOODNET_COLOR_MASKS_DIR`, `ROAD_WATERLOGGING_MODELS_DIR`, `ROAD_WATERLOGGING_OUTPUTS_DIR`, `ROAD_WATERLOGGING_REPORTS_DIR`, and `ROAD_WATERLOGGING_BASE_FEATURES` can also override local defaults. The existing checkpoints use `base_features=32`.
+
+## Train and resume
+
+Training saves `floodnet_unet_last.pth` after each epoch, updates `floodnet_unet_best.pth` when validation mIoU improves, and writes `reports/training_history.json`. The default run detects and resumes the latest valid local checkpoint. `--epochs` is the desired total epoch, not the number of additional epochs.
+
 ```bash
-python -m src.train
+python -m src.train --epochs 15
 ```
-Checkpoints are saved to `models/` automatically. Training can be resumed from the last checkpoint.
 
-### Evaluation
-Evaluate a saved model checkpoint on the validation set:
+Explicit resume:
+
 ```bash
-python -m src.evaluate
+python -m src.train --epochs 15 --resume models/floodnet_unet_last.pth
 ```
-Metrics reported: mIoU, per-class IoU (Road-flooded, Road-non-flooded, Water), pixel accuracy.
 
-### Prediction / Inference
-Run inference on a single image:
+For Google Colab, mount persistent Drive and pass a durable directory:
+
 ```bash
-python -m src.predict --image path/to/image.jpg
+python -m src.train --epochs 15 --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
 ```
 
-### Web Application (Streamlit)
-Launch the interactive Streamlit web interface:
+To intentionally start a new run without resuming, pass `--no-auto-resume`. Checkpoints are ignored by Git; keep copies in persistent storage because local runtime disks are not backups.
+
+Useful options include `--floodnet-dir`, `--batch-size`, `--subset`, `--base-features`, `--checkpoint-dir`, and `--no-auto-resume`. Use the same architecture width when resuming. An architecture mismatch now stops with an error instead of silently restarting.
+
+## Evaluation
+
+Use the validation split for model selection. Run the held-out test split only for final evaluation, not repeated tuning:
+
+```bash
+python -m src.evaluate --split val
+python -m src.evaluate --split test
+```
+
+The evaluator writes per-class IoU, mIoU, pixel accuracy, a confusion matrix, checkpoint metadata, and three genuine original/ground-truth/prediction comparisons. JSON reports are saved under `reports/`; comparison images are saved under `outputs/visualizations/`.
+
+## Application and prediction
+
+Launch the upload app from the project root:
+
 ```bash
 streamlit run app.py
 ```
-The app accepts image uploads, runs segmentation, and displays the predicted mask, flooded-road area percentage, and severity tier.
 
-### Tests
+The app accepts JPEG, PNG, and WEBP files, validates upload size and dimensions, loads a checkpoint once, and displays the original, semantic mask, and an overlay highlighting predicted Road-flooded pixels. It reports area only when road pixels are predicted. A checkpoint with zero recorded Road-flooded validation IoU triggers a clear warning.
+
+The current app uses the actual segmentation model, not the legacy binary classifier. Its inference transform matches training resize and ImageNet normalization; output class masks are resized to the upload dimensions using nearest-neighbor interpolation.
+
+## Tests
+
+Run the included CPU-compatible tests:
+
 ```bash
-python -m pytest tests/
+python -m unittest discover -s tests -v
 ```
 
----
+Tests cover FloodNet pair loading, U-Net output shapes, finite loss and gradients, an actual two-epoch synthetic save/resume cycle, checkpoint persistence helpers, inference output sizing, and severity formulas/boundaries.
 
-## 12. What Teammates Need To Do After Cloning
+## Current model status and limitations
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/vaishnavij1612/Road_WaterLogging_Project-.git
-   cd Road_WaterLogging_Project-
-   ```
+The checked-in `reports/training_history.json` documents a partial three-epoch run. Its best validation mIoU is 0.2072 at epoch 2; Road-flooded IoU is 0.0 in all three recorded epochs. The local workspace had an epoch-2 best checkpoint and an epoch-3 latest checkpoint when this README was updated, but model files are intentionally excluded from Git. The epoch-2 best checkpoint was evaluated once on each complete split:
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+| Split | Samples | mIoU | Pixel accuracy | Road-flooded IoU | Road-non-flooded IoU | Water IoU | Road-flooded pixels predicted |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Validation | 450 | 0.2072 | 0.5666 | 0.0000 | 0.3823 | 0.2990 | 0 |
+| Held-out test | 448 | 0.2084 | 0.5611 | 0.0000 | 0.3819 | 0.3350 | 0 |
 
-3. **Download the FloodNet dataset** from the official source (see Section 7 above) and place it at `floodnet_dataset/FloodNet-Supervised_v1.0/`.
+These complete-split results confirm the model does not detect the target Road-flooded class: the validation and test ground truth contain 732,160 and 647,747 resized class-3 pixels, respectively, yet the model predicts none. A deterministic sample of 64 evenly spaced training masks contained Road-flooded labels in 8 images, and the class remained present in all 8 after the 256 × 256 nearest-neighbor resize. This supports sparse image-level class representation as a possible contributor, but does not prove the root cause. The actual-data one-step sanity check verified finite loss/gradients and an optimizer update; it is not evidence of model quality. No full retraining was performed because the available PyTorch build is CPU-only. Do not present affected-area or severity estimates from this checkpoint as reliable. Metrics and diagnostics are in `reports/evaluation_val.json`, `reports/evaluation_test.json`, `reports/downsampling_diagnostic.json`, and `reports/sanity_check.json`; real comparison images are generated under `outputs/visualizations/` (the images are ignored by Git).
 
-4. **Run training** to generate model checkpoints:
-   ```bash
-   python -m src.train
-   ```
+FloodNet is aerial imagery. Generalization to street-level camera images is unverified. The model predicts 2D semantic classes; its project tiers do not estimate depth, water volume, passability, or safety. The repository’s generic `dataset/` collection is not suitable for training this FloodNet segmentation model because its annotations do not mark flooded-road pixels.
 
-5. **(Optional) Resume from a shared checkpoint** — if a teammate shares `models/floodnet_unet_best.pth`, place it in `models/` before running evaluation or the web app.
+## Main files
 
----
-
-## 13. What Remains To Be Completed
-
-- [ ] Continue training for ≥15 epochs (currently 3 epochs completed).
-- [ ] Improve `Road-flooded` class IoU (currently 0.0 — requires class-weighted loss or focal loss).
-- [ ] Run full evaluation and report final mIoU / per-class metrics.
-- [ ] Generate sample prediction visualizations for the README.
-- [ ] Publish trained model checkpoint via GitHub Releases or cloud storage.
-- [ ] Integrate weather data API for real-world deployment.
-- [ ] Optimize Streamlit app for production use.
-
----
-
-## 14. Limitations & Future Work
-
-### Limitations
-- **Training incomplete:** Results above are from early-stage training (3 epochs). Final accuracy/mIoU pending.
-- **Class imbalance:** `Road-flooded` is a rare class in FloodNet; class-weighted loss or oversampling is needed.
-- **Depth Measurement:** This system estimates 2D surface coverage, not physical 3D water depth.
-- **Domain Shift:** Aerial imagery (FloodNet) may not directly generalize to street-level camera perspectives.
-
-### Future Work
-- Integration with real-time municipal CCTV streams.
-- Weather radar / rainfall precipitation API integration.
-- Monocular depth estimation (e.g., MiDaS / Depth-Anything) for volumetric estimation.
-- Multi-city generalization and domain adaptation.
-
----
-
-## 15. Preprocessing & Augmentation
-
-- **Images:** Resized to 256 × 256 using bilinear interpolation; normalized with ImageNet statistics (μ = [0.485, 0.456, 0.406], σ = [0.229, 0.224, 0.225]).
-- **Masks:** Resized using nearest-neighbor interpolation to preserve discrete class labels.
-- **Augmentation:** Synchronized horizontal flips, rotations (±15°), and affine transforms applied identically to image and mask; photometric adjustments (brightness/contrast) applied only to the RGB image.
-
----
-
-## 16. Acknowledgements
-
-- **FloodNet Dataset:** Rahnemoonfar et al., "FloodNet: A High Resolution Aerial Imagery Dataset for Post Flood Scene Understanding," IEEE Access, 2021.
-- **U-Net:** Ronneberger et al., "U-Net: Convolutional Networks for Biomedical Image Segmentation," MICCAI 2015.
+- `src/config.py` — paths, class IDs, image size, and training defaults.
+- `src/dataset_loader.py`, `src/preprocessing.py` — paired FloodNet input pipeline.
+- `src/segmentation.py`, `src/train.py` — U-Net, losses, metrics, and resumable training.
+- `src/predict.py`, `src/evaluate.py` — checkpoint inference and real split evaluation.
+- `notebooks/FloodNet_UNet_Training.ipynb` — Colab workflow calling the maintained training/evaluation modules.
+- `app.py` — Streamlit upload and visualization flow.
+- `models/` — local checkpoints (ignored by Git).
+- `reports/`, `outputs/` — metrics, history, and generated visualizations.

@@ -4,6 +4,8 @@ from pathlib import Path
 import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import numpy as np
+from PIL import Image
 
 from src.segmentation import UNet
 from src.train import (
@@ -11,6 +13,7 @@ from src.train import (
     save_checkpoint_bundle,
     detect_checkpoint_to_resume,
     save_history_json,
+    train,
 )
 
 
@@ -144,6 +147,50 @@ class TestTrainResumePipeline(unittest.TestCase):
 
         self.assertTrue((self.reports_dir / "training_history.json").exists())
         self.assertTrue((self.drive_dir / "training_history.json").exists())
+
+    def test_minimal_training_run_resumes_at_next_epoch(self):
+        dataset_dir = Path(self.temp_dir.name) / "FloodNet"
+        for split in ("train", "val"):
+            image_dir = dataset_dir / split / f"{split}-org-img"
+            mask_dir = dataset_dir / split / f"{split}-label-img"
+            image_dir.mkdir(parents=True)
+            mask_dir.mkdir(parents=True)
+            Image.new("RGB", (64, 64), color=(70, 100, 130)).save(image_dir / "sample.jpg")
+            mask = np.full((64, 64), 4, dtype=np.uint8)
+            mask[:8, :8] = 3
+            Image.fromarray(mask, mode="L").save(mask_dir / "sample_lab.png")
+
+        checkpoint_dir = Path(self.temp_dir.name) / "tiny_models"
+        reports_dir = Path(self.temp_dir.name) / "tiny_reports"
+        train(
+            floodnet_dir=dataset_dir,
+            epochs=1,
+            batch_size=1,
+            img_size=(32, 32),
+            device=torch.device("cpu"),
+            base_features=2,
+            checkpoint_dir=checkpoint_dir,
+            reports_dir=reports_dir,
+            drive_save_dir=None,
+            auto_resume=False,
+        )
+        last_checkpoint = checkpoint_dir / "floodnet_unet_last.pth"
+        self.assertTrue(last_checkpoint.is_file())
+        train(
+            floodnet_dir=dataset_dir,
+            epochs=2,
+            batch_size=1,
+            img_size=(32, 32),
+            device=torch.device("cpu"),
+            base_features=2,
+            checkpoint_dir=checkpoint_dir,
+            reports_dir=reports_dir,
+            drive_save_dir=None,
+            auto_resume=True,
+        )
+        resumed = torch.load(last_checkpoint, map_location="cpu", weights_only=False)
+        self.assertEqual(resumed["epoch"], 2)
+        self.assertEqual(len(resumed["history"]), 2)
 
 
 if __name__ == "__main__":

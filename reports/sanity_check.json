@@ -1,0 +1,23 @@
+{
+  "dataset_sample": "10165.jpg",
+  "input_shape": [
+    3,
+    256,
+    256
+  ],
+  "target_shape": [
+    256,
+    256
+  ],
+  "target_class_ids": [
+    5
+  ],
+  "loss_finite": true,
+  "loss": 1.747329,
+  "gradients_finite": true,
+  "optimizer_updated_parameters": true,
+  "optimizer_steps": 1,
+  "device": "cpu",
+  "checkpoint_saved": false,
+  "note": "One-batch pipeline sanity check only; not a training run or model-quality result."
+}

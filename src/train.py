@@ -52,6 +52,7 @@ from src.config import (
     RANDOM_SEED,
     NUM_CLASSES,
     FLOODNET_CLASSES,
+    BASE_FEATURES,
 )
 from src.dataset_loader import build_floodnet_dataloaders, FloodNetDataset
 from src.preprocessing import DualSegmentationTransform
@@ -335,7 +336,7 @@ def train(
     subset_fraction=1.0,
     resume_checkpoint=None,
     auto_resume=True,
-    base_features=64,
+    base_features=BASE_FEATURES,
     checkpoint_dir=MODELS_DIR,
     reports_dir=REPORTS_DIR,
     drive_save_dir=None,
@@ -420,8 +421,10 @@ def train(
     if resume_checkpoint:
         chosen_checkpoint = Path(resume_checkpoint)
         if not chosen_checkpoint.exists():
-            print(f"[Resume] Specified checkpoint '{resume_checkpoint}' not found.")
-            chosen_checkpoint = None
+            raise FileNotFoundError(
+                f"Specified resume checkpoint does not exist: {resume_checkpoint}. "
+                "Pass --no-auto-resume to intentionally start a new run."
+            )
     elif auto_resume:
         chosen_checkpoint = detect_checkpoint_to_resume(
             checkpoint_dir=checkpoint_dir,
@@ -434,7 +437,10 @@ def train(
         try:
             ckpt = torch.load(chosen_checkpoint, map_location=device, weights_only=False)
             model.load_state_dict(ckpt["model_state_dict"])
-            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            if "optimizer_state_dict" in ckpt:
+                optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            else:
+                print("[Resume] Checkpoint has no optimizer state; restoring weights and starting a fresh optimizer.")
             if "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"] is not None:
                 scheduler.load_state_dict(ckpt["scheduler_state_dict"])
                 current_lr = optimizer.param_groups[0]["lr"]
@@ -444,7 +450,25 @@ def train(
             start_epoch = completed_epoch + 1
             best_miou = ckpt.get("best_miou", 0.0)
             patience_counter = ckpt.get("patience_counter", 0)
-            history = ckpt.get("history", [])
+            history = ckpt.get("history") or []
+            if not history:
+                # Older handover checkpoints may omit history even though the
+                # durable JSON report contains the completed epochs.
+                history_path = reports_dir / "training_history.json"
+                if history_path.is_file():
+                    try:
+                        with history_path.open("r", encoding="utf-8") as history_file:
+                            saved_rows = json.load(history_file).get("history", [])
+                        matching_rows = [row for row in saved_rows if row.get("epoch", 0) <= completed_epoch]
+                        if matching_rows and matching_rows[-1].get("epoch") == completed_epoch:
+                            history = matching_rows
+                            print(f"[Resume] Restored {len(history)} history rows from {history_path}.")
+                        else:
+                            print(
+                                f"[Resume] Ignoring {history_path}: it does not end at checkpoint epoch {completed_epoch}."
+                            )
+                    except (OSError, json.JSONDecodeError) as history_error:
+                        print(f"[Resume] Could not restore history JSON: {history_error}")
 
             print(
                 f"[Resume] Successfully restored training state:\n"
@@ -455,11 +479,11 @@ def train(
                 f"         History entries  : {len(history)} epochs\n"
             )
         except Exception as e:
-            print(f"[Resume] Error reading checkpoint {chosen_checkpoint}: {e}. Starting fresh.")
-            start_epoch = 1
-            best_miou = 0.0
-            patience_counter = 0
-            history = []
+            raise RuntimeError(
+                f"Could not resume from {chosen_checkpoint}; refusing to silently restart and overwrite progress. "
+                "Check that --base-features and checkpoint architecture match, or pass --no-auto-resume "
+                f"to intentionally start a new run. Original error: {e}"
+            ) from e
 
     best_ckpt_path = checkpoint_dir / "floodnet_unet_best.pth"
 
@@ -583,7 +607,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     parser.add_argument("--lr", type=float, default=LEARNING_RATE)
     parser.add_argument("--subset", type=float, default=1.0, help="Fraction of training data [0-1]")
-    parser.add_argument("--base-features", type=int, default=64)
+    parser.add_argument("--base-features", type=int, default=BASE_FEATURES)
     parser.add_argument("--patience", type=int, default=PATIENCE)
     parser.add_argument("--resume", type=Path, default=None, help="Explicit checkpoint path to resume from")
     parser.add_argument(

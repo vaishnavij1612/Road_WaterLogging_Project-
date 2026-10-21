@@ -1,0 +1,11 @@
+{
+  "split": "train",
+  "method": "64 evenly spaced source masks; nearest-neighbor resize to 256x256",
+  "sample_count": 64,
+  "sampled_with_road_flooded_at_source": 8,
+  "sampled_with_road_flooded_after_resize": 8,
+  "source_road_flooded_pixel_count": 26994782,
+  "resized_road_flooded_pixel_count": 125445,
+  "interpretation": "Sample diagnostic only; not a full-split class-frequency estimate.",
+  "resized_to_area_scaled_pixel_count_ratio": 1.0003
+}

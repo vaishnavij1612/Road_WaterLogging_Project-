@@ -50,8 +50,9 @@ class SeverityEstimator:
 
     def estimate(
         self,
-        affected_area_pct: float,
-        waterlogging_detected: bool = True
+        affected_area_pct: float = None,
+        waterlogging_detected: bool = True,
+        road_pixels: int = 1,
     ) -> Dict[str, Any]:
         """
         Estimate severity tier from flooded-road area percentage.
@@ -70,6 +71,16 @@ class SeverityEstimator:
             - color: Hex color code for UI visualization
             - affected_area_pct: Clamped float value
         """
+        if affected_area_pct is None or road_pixels <= 0:
+            return {
+                "severity_level": "UNAVAILABLE",
+                "severity_type": SEVERITY_TYPE_LABEL,
+                "is_project_defined": True,
+                "explanation": "No road pixels were predicted, so a road-area percentage cannot be calculated.",
+                "color": "#64748B",
+                "affected_area_pct": None,
+            }
+
         area = max(0.0, min(100.0, float(affected_area_pct)))
 
         if not waterlogging_detected or area <= self.thresholds["NONE"][1]:
@@ -78,8 +89,8 @@ class SeverityEstimator:
                 "severity_type": SEVERITY_TYPE_LABEL,
                 "is_project_defined": True,
                 "explanation": (
-                    f"Roadway is dry ({area:.1f}% flooded road surface). "
-                    "Normal vehicular traffic conditions."
+                    f"Project-defined flooded-road coverage is {area:.1f}%; "
+                    "this is not a depth or safety assessment."
                 ),
                 "color": "#10B981",
                 "affected_area_pct": round(area, 2)
@@ -89,21 +100,21 @@ class SeverityEstimator:
             level = "LOW"
             explanation = (
                 f"Minor road waterlogging ({area:.1f}% of road surface). "
-                "Localized puddles; passable with caution at reduced speeds."
+                "This project-defined tier is not a depth or safety assessment."
             )
             color = "#FBBF24"
         elif area <= self.thresholds["MODERATE"][1]:
             level = "MODERATE"
             explanation = (
                 f"Moderate road waterlogging ({area:.1f}% of road surface). "
-                "Substantial water accumulation affecting traffic lanes; aquaplaning risk."
+                "This project-defined tier is not a depth or safety assessment."
             )
             color = "#F97316"
         else:
             level = "SEVERE"
             explanation = (
                 f"Severe road waterlogging ({area:.1f}% of road surface). "
-                "Critical roadway inundation; road hazardous or impassable."
+                "This project-defined tier is not a depth or safety assessment."
             )
             color = "#EF4444"
 

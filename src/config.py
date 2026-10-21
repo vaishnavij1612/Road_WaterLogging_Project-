@@ -10,16 +10,16 @@ import torch
 
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATASET_DIR = BASE_DIR / "dataset"
-FLOODNET_DIR = BASE_DIR / "floodnet_dataset" / "FloodNet-Supervised_v1.0"
-COLOR_MASKS_DIR = BASE_DIR / "floodnet_dataset" / "ColorMasks-FloodNetv1.0"
-MODELS_DIR = BASE_DIR / "models"
-OUTPUTS_DIR = BASE_DIR / "outputs"
+DATASET_DIR = Path(os.environ.get("ROAD_WATERLOGGING_DATASET_DIR", BASE_DIR / "dataset")).expanduser()
+FLOODNET_DIR = Path(os.environ.get("FLOODNET_DIR", BASE_DIR / "floodnet_dataset" / "FloodNet-Supervised_v1.0")).expanduser()
+COLOR_MASKS_DIR = Path(os.environ.get("FLOODNET_COLOR_MASKS_DIR", BASE_DIR / "floodnet_dataset" / "ColorMasks-FloodNetv1.0")).expanduser()
+MODELS_DIR = Path(os.environ.get("ROAD_WATERLOGGING_MODELS_DIR", BASE_DIR / "models")).expanduser()
+OUTPUTS_DIR = Path(os.environ.get("ROAD_WATERLOGGING_OUTPUTS_DIR", BASE_DIR / "outputs")).expanduser()
 GRAPHS_DIR = OUTPUTS_DIR / "graphs"
 PREDICTIONS_DIR = OUTPUTS_DIR / "predictions"
 MASKS_DIR = OUTPUTS_DIR / "masks"
 VISUALIZATIONS_DIR = OUTPUTS_DIR / "visualizations"
-REPORTS_DIR = BASE_DIR / "reports"
+REPORTS_DIR = Path(os.environ.get("ROAD_WATERLOGGING_REPORTS_DIR", BASE_DIR / "reports")).expanduser()
 
 # Hardware setup
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,6 +63,7 @@ IMG_SIZE = (256, 256)
 SEG_IMG_SIZE = (256, 256)
 BATCH_SIZE = 8 if torch.cuda.is_available() else 4
 DEFAULT_EPOCHS = 15
+BASE_FEATURES = int(os.environ.get("ROAD_WATERLOGGING_BASE_FEATURES", "32"))
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
 PATIENCE = 5

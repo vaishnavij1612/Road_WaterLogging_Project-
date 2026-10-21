@@ -284,41 +284,32 @@ def calculate_floodnet_road_severity(pred_mask: np.ndarray) -> Dict[str, Any]:
         road_waterlogged_pct = (road_flooded_pixels / total_road_pixels) * 100.0
         is_road_visible = True
     else:
-        road_waterlogged_pct = 0.0
+        road_waterlogged_pct = None
         is_road_visible = False
 
     scene_water_pct = ((water_pixels + road_flooded_pixels) / total_scene_pixels) * 100.0
 
-    # Severity Tier Definition
+    # A scene water class cannot substitute for a road mask in the project formula.
     if not is_road_visible:
-        if scene_water_pct > 25.0:
-            severity = "SEVERE"
-            explanation = f"No roadway detected in scene; massive surface water detected ({scene_water_pct:.1f}% scene coverage)."
-            color = "#EF4444"
-        elif scene_water_pct > 5.0:
-            severity = "MODERATE"
-            explanation = f"No roadway detected in scene; moderate standing water present ({scene_water_pct:.1f}% scene coverage)."
-            color = "#F97316"
-        else:
-            severity = "NONE"
-            explanation = "No roadway visible; minimal or no surface water detected."
-            color = "#10B981"
+        severity = "UNAVAILABLE"
+        explanation = "No road pixels were predicted, so a road-area percentage cannot be calculated."
+        color = "#64748B"
     else:
         if road_waterlogged_pct <= 0.5:
             severity = "NONE"
-            explanation = f"Roadway is dry ({road_waterlogged_pct:.1f}% flooded road surface). Safe for all traffic."
+            explanation = f"Project-defined flooded-road coverage is {road_waterlogged_pct:.1f}%; this is not a depth or safety assessment."
             color = "#10B981"
         elif road_waterlogged_pct <= 15.0:
             severity = "LOW"
-            explanation = f"Minor road waterlogging ({road_waterlogged_pct:.1f}% of road surface). Passable with reduced speed."
+            explanation = f"Project-defined flooded-road coverage is {road_waterlogged_pct:.1f}%; this is not a depth or safety assessment."
             color = "#FBBF24"
         elif road_waterlogged_pct <= 40.0:
             severity = "MODERATE"
-            explanation = f"Moderate road waterlogging ({road_waterlogged_pct:.1f}% of road surface). Travel lanes submerged; aquaplaning hazard."
+            explanation = f"Project-defined flooded-road coverage is {road_waterlogged_pct:.1f}%; this is not a depth or safety assessment."
             color = "#F97316"
         else:
             severity = "SEVERE"
-            explanation = f"Severe road waterlogging ({road_waterlogged_pct:.1f}% of road surface). Road inundated and impassable."
+            explanation = f"Project-defined flooded-road coverage is {road_waterlogged_pct:.1f}%; this is not a depth or safety assessment."
             color = "#EF4444"
 
     return {
@@ -328,7 +319,7 @@ def calculate_floodnet_road_severity(pred_mask: np.ndarray) -> Dict[str, Any]:
             "the predicted flooded-road area percentage"
         ),
         "is_project_defined": True,
-        "road_waterlogged_pct": round(road_waterlogged_pct, 2),
+        "road_waterlogged_pct": round(road_waterlogged_pct, 2) if road_waterlogged_pct is not None else None,
         "scene_water_pct": round(scene_water_pct, 2),
         "road_flooded_pixels": road_flooded_pixels,
         "road_dry_pixels": road_dry_pixels,

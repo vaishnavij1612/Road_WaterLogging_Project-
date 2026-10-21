@@ -119,6 +119,11 @@ class DualSegmentationTransform:
 
         # Convert mask to LongTensor (class indices) without scaling
         mask_np = np.array(mask, dtype=np.int64)
+        if mask_np.ndim != 2:
+            raise ValueError(f"Segmentation masks must be single-channel class IDs; got shape {mask_np.shape}.")
+        invalid = np.unique(mask_np[(mask_np < 0) | (mask_np >= 10)])
+        if invalid.size:
+            raise ValueError(f"Mask contains values outside FloodNet class IDs 0–9: {invalid[:12].tolist()}.")
         mask_tensor = torch.from_numpy(mask_np)
 
         return img_tensor, mask_tensor
