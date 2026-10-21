@@ -192,6 +192,24 @@ class TestTrainResumePipeline(unittest.TestCase):
         self.assertEqual(resumed["epoch"], 2)
         self.assertEqual(len(resumed["history"]), 2)
 
+        fresh_dir = Path(self.temp_dir.name) / "fresh_optimizer_models"
+        train(
+            floodnet_dir=dataset_dir,
+            epochs=1,
+            batch_size=1,
+            img_size=(32, 32),
+            device=torch.device("cpu"),
+            base_features=2,
+            checkpoint_dir=fresh_dir,
+            reports_dir=Path(self.temp_dir.name) / "fresh_optimizer_reports",
+            drive_save_dir=None,
+            init_weights_checkpoint=last_checkpoint,
+            auto_resume=True,
+        )
+        initialized = torch.load(fresh_dir / "floodnet_unet_last.pth", map_location="cpu", weights_only=False)
+        self.assertEqual(initialized["epoch"], 1)
+        self.assertEqual(len(initialized["history"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

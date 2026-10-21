@@ -80,10 +80,12 @@ For Google Colab, mount persistent Drive and pass a durable directory:
 python -m src.train --epochs 15 --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
 ```
 
-For a GPU run, install the CUDA-enabled PyTorch build that matches the host, confirm `torch.cuda.is_available()` is `True`, and place both the extracted dataset and the ignored `floodnet_unet_last.pth` checkpoint on that host. Keep checkpoints on persistent storage. The local CPU-only runtime cannot complete a useful full-data run. Resume the epoch-3 checkpoint with the corrected loss and train to a larger total epoch count; validation is evaluated and checkpoints are saved each epoch:
+The prior checkpoint’s model weights load strictly into the current U-Net (all keys match). Its Adam state contains 64 parameter entries accumulated under the old loss, so resuming would carry optimizer moments shaped by the faulty objective. For the corrected run, initialize from the epoch-2 best model weights and start fresh optimizer, scheduler, epoch count, and history. This keeps the strongest existing initialization while avoiding stale optimizer state. `--init-weights` supports that workflow and `--reports-dir` keeps its history separate from the baseline.
+
+For a GPU run, install the CUDA-enabled PyTorch build that matches the host, confirm `torch.cuda.is_available()` is `True`, and place both the extracted dataset and the ignored `floodnet_unet_best.pth` checkpoint on that host. Keep checkpoints on persistent storage. This workspace currently has CPU-only PyTorch, no CUDA device, and no accessible remote GPU runtime. The local CPU-only runtime cannot complete a useful full-data run. The reproducible command is:
 
 ```bash
-python -m src.train --epochs 20 --resume models/floodnet_unet_last.pth --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
+python -m src.train --epochs 20 --init-weights models/floodnet_unet_best.pth --no-auto-resume --checkpoint-dir models/floodnet_unet_corrected_dice --reports-dir reports/corrected_dice_run --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
 ```
 
 Select the checkpoint using validation metrics. Once training and model selection are finished, evaluate validation as needed and run the held-out test split once for final reporting.

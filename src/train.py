@@ -335,6 +335,7 @@ def train(
     device=DEVICE,
     subset_fraction=1.0,
     resume_checkpoint=None,
+    init_weights_checkpoint=None,
     auto_resume=True,
     base_features=BASE_FEATURES,
     checkpoint_dir=MODELS_DIR,
@@ -416,9 +417,19 @@ def train(
     patience_counter = 0
     history: List[Dict[str, Any]] = []
 
-    # Checkpoint resolution: explicit or automatic detection
+    # A weights-only initialization keeps learned model parameters but starts
+    # a fresh optimizer, scheduler, epoch counter, and validation history.
+    if init_weights_checkpoint is not None and resume_checkpoint is not None:
+        raise ValueError("Pass either init_weights_checkpoint or resume_checkpoint, not both.")
+
+    # Checkpoint resolution: weights-only initialization, explicit resume, or automatic detection
     chosen_checkpoint = None
-    if resume_checkpoint:
+    weights_only_initialization = init_weights_checkpoint is not None
+    if weights_only_initialization:
+        chosen_checkpoint = Path(init_weights_checkpoint)
+        if not chosen_checkpoint.exists():
+            raise FileNotFoundError(f"Weights-only checkpoint does not exist: {chosen_checkpoint}")
+    elif resume_checkpoint:
         chosen_checkpoint = Path(resume_checkpoint)
         if not chosen_checkpoint.exists():
             raise FileNotFoundError(
@@ -433,51 +444,58 @@ def train(
         )
 
     if chosen_checkpoint is not None:
-        print(f"\n[Resume] Found checkpoint to resume from: {chosen_checkpoint}")
+        action = "Weights-only initialization" if weights_only_initialization else "Resume"
+        print(f"\n[{action}] Loading checkpoint: {chosen_checkpoint}")
         try:
             ckpt = torch.load(chosen_checkpoint, map_location=device, weights_only=False)
             model.load_state_dict(ckpt["model_state_dict"])
-            if "optimizer_state_dict" in ckpt:
-                optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            if weights_only_initialization:
+                print(
+                    "[Weights-only initialization] Model weights restored; optimizer, scheduler, "
+                    "epoch counter, and history start fresh."
+                )
             else:
-                print("[Resume] Checkpoint has no optimizer state; restoring weights and starting a fresh optimizer.")
-            if "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"] is not None:
-                scheduler.load_state_dict(ckpt["scheduler_state_dict"])
-                current_lr = optimizer.param_groups[0]["lr"]
-                print(f"[Resume] Scheduler state restored (current LR: {current_lr:.6f})")
+                if "optimizer_state_dict" in ckpt:
+                    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+                else:
+                    print("[Resume] Checkpoint has no optimizer state; restoring weights and starting a fresh optimizer.")
+                if "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"] is not None:
+                    scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+                    current_lr = optimizer.param_groups[0]["lr"]
+                    print(f"[Resume] Scheduler state restored (current LR: {current_lr:.6f})")
 
-            completed_epoch = ckpt.get("epoch", 0)
-            start_epoch = completed_epoch + 1
-            best_miou = ckpt.get("best_miou", 0.0)
-            patience_counter = ckpt.get("patience_counter", 0)
-            history = ckpt.get("history") or []
-            if not history:
-                # Older handover checkpoints may omit history even though the
-                # durable JSON report contains the completed epochs.
-                history_path = reports_dir / "training_history.json"
-                if history_path.is_file():
-                    try:
-                        with history_path.open("r", encoding="utf-8") as history_file:
-                            saved_rows = json.load(history_file).get("history", [])
-                        matching_rows = [row for row in saved_rows if row.get("epoch", 0) <= completed_epoch]
-                        if matching_rows and matching_rows[-1].get("epoch") == completed_epoch:
-                            history = matching_rows
-                            print(f"[Resume] Restored {len(history)} history rows from {history_path}.")
-                        else:
-                            print(
-                                f"[Resume] Ignoring {history_path}: it does not end at checkpoint epoch {completed_epoch}."
-                            )
-                    except (OSError, json.JSONDecodeError) as history_error:
-                        print(f"[Resume] Could not restore history JSON: {history_error}")
+                completed_epoch = ckpt.get("epoch", 0)
+                start_epoch = completed_epoch + 1
+                best_miou = ckpt.get("best_miou", 0.0)
+                patience_counter = ckpt.get("patience_counter", 0)
+                history = ckpt.get("history") or []
+                if not history:
+                    # Older handover checkpoints may omit history even though the
+                    # durable JSON report contains the completed epochs.
+                    history_path = reports_dir / "training_history.json"
+                    if history_path.is_file():
+                        try:
+                            with history_path.open("r", encoding="utf-8") as history_file:
+                                saved_rows = json.load(history_file).get("history", [])
+                            matching_rows = [row for row in saved_rows if row.get("epoch", 0) <= completed_epoch]
+                            if matching_rows and matching_rows[-1].get("epoch") == completed_epoch:
+                                history = matching_rows
+                                print(f"[Resume] Restored {len(history)} history rows from {history_path}.")
+                            else:
+                                print(
+                                    f"[Resume] Ignoring {history_path}: it does not end at checkpoint epoch {completed_epoch}."
+                                )
+                        except (OSError, json.JSONDecodeError) as history_error:
+                            print(f"[Resume] Could not restore history JSON: {history_error}")
 
-            print(
-                f"[Resume] Successfully restored training state:\n"
-                f"         Completed epoch  : {completed_epoch}\n"
-                f"         Resuming at epoch: {start_epoch}\n"
-                f"         Best mIoU so far : {best_miou:.4f}\n"
-                f"         Patience counter : {patience_counter}/{patience}\n"
-                f"         History entries  : {len(history)} epochs\n"
-            )
+                print(
+                    f"[Resume] Successfully restored training state:\n"
+                    f"         Completed epoch  : {completed_epoch}\n"
+                    f"         Resuming at epoch: {start_epoch}\n"
+                    f"         Best mIoU so far : {best_miou:.4f}\n"
+                    f"         Patience counter : {patience_counter}/{patience}\n"
+                    f"         History entries  : {len(history)} epochs\n"
+                )
         except Exception as e:
             raise RuntimeError(
                 f"Could not resume from {chosen_checkpoint}; refusing to silently restart and overwrite progress. "
@@ -611,6 +629,12 @@ def parse_args():
     parser.add_argument("--patience", type=int, default=PATIENCE)
     parser.add_argument("--resume", type=Path, default=None, help="Explicit checkpoint path to resume from")
     parser.add_argument(
+        "--init-weights",
+        type=Path,
+        default=None,
+        help="Initialize model weights from a checkpoint, with fresh optimizer, scheduler, epoch, and history",
+    )
+    parser.add_argument(
         "--no-auto-resume",
         action="store_true",
         help="Disable automatic detection and resumption from latest checkpoint",
@@ -620,6 +644,12 @@ def parse_args():
         type=Path,
         default=MODELS_DIR,
         help="Local directory to store and search for checkpoints",
+    )
+    parser.add_argument(
+        "--reports-dir",
+        type=Path,
+        default=REPORTS_DIR,
+        help="Directory for run history and reports",
     )
     parser.add_argument(
         "--drive-dir",
@@ -641,7 +671,9 @@ if __name__ == "__main__":
         base_features=args.base_features,
         patience=args.patience,
         resume_checkpoint=args.resume,
+        init_weights_checkpoint=args.init_weights,
         auto_resume=not args.no_auto_resume,
         checkpoint_dir=args.checkpoint_dir,
+        reports_dir=args.reports_dir,
         drive_save_dir=args.drive_dir,
     )
