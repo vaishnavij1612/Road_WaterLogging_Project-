@@ -205,7 +205,7 @@ def save_checkpoint_bundle(
     }
 
     target_dirs = [Path(checkpoint_dir)]
-    if drive_dir is not None:
+    if drive_dir is not None and Path(drive_dir) != target_dirs[0]:
         target_dirs.append(Path(drive_dir))
 
     for t_dir in target_dirs:
@@ -237,7 +237,7 @@ def save_history_json(
         "severity_methodology": severity_methodology,
     }
     target_dirs = [Path(reports_dir)]
-    if drive_dir is not None:
+    if drive_dir is not None and Path(drive_dir) != target_dirs[0]:
         target_dirs.append(Path(drive_dir))
 
     for t_dir in target_dirs:
