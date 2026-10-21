@@ -13,7 +13,7 @@
   },
   "corrected_training_run": {
     "started": false,
-    "reason": "No CUDA GPU or accessible remote GPU runtime is available. Full FloodNet training was not run on CPU.",
+    "reason": "No CUDA GPU or accessible remote GPU runtime is available to this task. Full FloodNet training was not run on CPU.",
     "validation_after_corrected_loss": null,
     "final_test_after_corrected_loss": null
   },
@@ -38,5 +38,17 @@
     "status": "historical baseline only; not reevaluated during corrected-loss work",
     "report": "reports/evaluation_test.json"
   },
-  "gpu_workflow": "See README.md Train and resume section; uses --init-weights, separate --checkpoint-dir and --reports-dir, and persistent --drive-dir."
+  "gpu_workflow": "See README.md Train and resume section; uses --init-weights, separate --checkpoint-dir and --reports-dir, and persistent --drive-dir.",
+  "hosted_gpu_workflow": {
+    "provider_prepared": "Google Colab",
+    "notebook": "notebooks/FloodNet_UNet_Training.ipynb",
+    "pinned_source_commit": "9b8058b6a5b6c303a1c42b0eaa40dc97bed633d6",
+    "dataset_drive_path": "/content/drive/MyDrive/FloodNet-Supervised_v1.0",
+    "initialization_checkpoint_drive_path": "/content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth",
+    "new_persistent_run_directory": "/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21",
+    "baseline_outputs_overwritten": false,
+    "runtime_access_verified": false,
+    "runtime_access_note": "The browser automation tool stopped before reading Chrome state because it could not determine the current browser URL with enough confidence. No Colab notebook or hosted runtime was accessed or executed.",
+    "one_external_action_needed": "In a signed-in Google account, place the extracted FloodNet Supervised v1.0 directory at MyDrive/FloodNet-Supervised_v1.0 and upload the existing best checkpoint to MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth; open the prepared notebook in Colab, select a GPU runtime, then run its setup and training cells."
+  }
 }

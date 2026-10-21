@@ -74,25 +74,22 @@ Explicit resume:
 python -m src.train --epochs 15 --resume models/floodnet_unet_last.pth
 ```
 
-For Google Colab, mount persistent Drive and pass a durable directory:
-
-```bash
-python -m src.train --epochs 15 --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
-```
+For Google Colab, use the corrected-loss notebook linked below. It pins the source revision, verifies the dataset/checkpoint paths and active GPU, initializes from the historical best weights with a fresh optimizer, keeps all new outputs in a separate Drive run folder, and gates the one-time test evaluation behind validation review. Do not use the historical `FloodNet_Checkpoints/` directory as an output directory.
 
 The prior checkpoint’s model weights load strictly into the current U-Net (all keys match). Its Adam state contains 64 parameter entries accumulated under the old loss, so resuming would carry optimizer moments shaped by the faulty objective. For the corrected run, initialize from the epoch-2 best model weights and start fresh optimizer, scheduler, epoch count, and history. This keeps the strongest existing initialization while avoiding stale optimizer state. `--init-weights` supports that workflow and `--reports-dir` keeps its history separate from the baseline.
 
-For a GPU run, install the CUDA-enabled PyTorch build that matches the host, confirm `torch.cuda.is_available()` is `True`, and place both the extracted dataset and the ignored `floodnet_unet_best.pth` checkpoint on that host. Keep checkpoints on persistent storage. This workspace currently has CPU-only PyTorch, no CUDA device, and no accessible remote GPU runtime. The local CPU-only runtime cannot complete a useful full-data run. The reproducible command is:
+For a non-notebook GPU run, place the extracted dataset and ignored `floodnet_unet_best.pth` checkpoint on the GPU host, confirm `torch.cuda.is_available()` is `True`, and choose a new persistent run directory. The repository saves latest, best-mIoU, and best-Road-flooded checkpoints plus epoch history there. The local workspace currently has CPU-only PyTorch, no CUDA device, and no accessible remote GPU runtime. The reproducible Colab command is:
 
 ```bash
-python -m src.train --epochs 20 --init-weights models/floodnet_unet_best.pth --no-auto-resume --checkpoint-dir models/floodnet_unet_corrected_dice --reports-dir reports/corrected_dice_run --drive-dir /content/drive/MyDrive/FloodNet_Checkpoints
+RUN_DIR=/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21
+python -m src.train --floodnet-dir /content/drive/MyDrive/FloodNet-Supervised_v1.0 --epochs 20 --init-weights /content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth --no-auto-resume --checkpoint-dir "$RUN_DIR" --reports-dir "$RUN_DIR" --drive-dir "$RUN_DIR"
 ```
 
 Select the checkpoint using validation metrics. Once training and model selection are finished, evaluate validation as needed and run the held-out test split once for final reporting.
 
 To intentionally start a new run without resuming, pass `--no-auto-resume`. Checkpoints are ignored by Git; keep copies in persistent storage because local runtime disks are not backups.
 
-Useful options include `--floodnet-dir`, `--batch-size`, `--subset`, `--base-features`, `--checkpoint-dir`, and `--no-auto-resume`. Use the same architecture width when resuming. An architecture mismatch now stops with an error instead of silently restarting.
+Useful options include `--floodnet-dir`, `--batch-size`, `--subset`, `--base-features`, `--init-weights`, `--checkpoint-dir`, `--reports-dir`, and `--no-auto-resume`. Use the same architecture width when resuming. An architecture mismatch now stops with an error instead of silently restarting.
 
 ## Evaluation
 
