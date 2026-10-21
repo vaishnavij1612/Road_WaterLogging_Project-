@@ -283,6 +283,13 @@ def compute_class_weights(train_loader, num_classes=10, max_batches=50, device=t
     return weights.float().to(device)
 
 
+def update_patience_counter(patience_counter, is_best_miou, is_best_road_flooded):
+    """Keep training while either monitored validation objective improves."""
+    if is_best_miou or is_best_road_flooded:
+        return 0
+    return patience_counter + 1
+
+
 # --- Training Loop ---
 
 def train_one_epoch(model, loader, criterion, optimizer, device, epoch, total_epochs):
@@ -588,14 +595,15 @@ def train(
         is_best_road_flooded = road_flooded_iou > best_road_flooded_iou
         if is_best:
             best_miou = miou
-            patience_counter = 0
             print(f"  * Best model saved  (mIoU={best_miou:.4f})")
-        else:
-            patience_counter += 1
-            print(f"  No improvement -- patience {patience_counter}/{patience}")
         if is_best_road_flooded:
             best_road_flooded_iou = road_flooded_iou
             print(f"  * Best Road-flooded checkpoint saved (IoU={best_road_flooded_iou:.4f})")
+        patience_counter = update_patience_counter(
+            patience_counter, is_best_miou=is_best, is_best_road_flooded=is_best_road_flooded
+        )
+        if not is_best and not is_best_road_flooded:
+            print(f"  No mIoU or Road-flooded improvement -- patience {patience_counter}/{patience}")
 
         # Save checkpoint bundle (best & last) to local and Drive
         save_checkpoint_bundle(
@@ -625,8 +633,8 @@ def train(
             severity_methodology=severity_method_str,
         )
 
-        if not is_best and patience_counter >= patience:
-            print(f"\n[EarlyStopping] No improvement for {patience} epochs. Stopping.")
+        if patience_counter >= patience:
+            print(f"\n[EarlyStopping] Neither mIoU nor Road-flooded IoU improved for {patience} epochs. Stopping.")
             break
 
     total_time = time.time() - t_start

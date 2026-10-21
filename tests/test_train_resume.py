@@ -14,10 +14,16 @@ from src.train import (
     detect_checkpoint_to_resume,
     save_history_json,
     train,
+    update_patience_counter,
 )
 
 
 class TestTrainResumePipeline(unittest.TestCase):
+
+    def test_road_flooded_improvement_resets_early_stopping_patience(self):
+        self.assertEqual(update_patience_counter(3, is_best_miou=False, is_best_road_flooded=True), 0)
+        self.assertEqual(update_patience_counter(3, is_best_miou=True, is_best_road_flooded=False), 0)
+        self.assertEqual(update_patience_counter(3, is_best_miou=False, is_best_road_flooded=False), 4)
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
