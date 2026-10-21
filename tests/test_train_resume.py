@@ -191,6 +191,8 @@ class TestTrainResumePipeline(unittest.TestCase):
         resumed = torch.load(last_checkpoint, map_location="cpu", weights_only=False)
         self.assertEqual(resumed["epoch"], 2)
         self.assertEqual(len(resumed["history"]), 2)
+        self.assertIn("Road-flooded", resumed["history"][0]["per_class_iou"])
+        self.assertIn("Road-non-flooded", resumed["history"][0]["per_class_iou"])
 
         fresh_dir = Path(self.temp_dir.name) / "fresh_optimizer_models"
         train(

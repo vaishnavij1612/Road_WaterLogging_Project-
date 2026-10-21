@@ -540,6 +540,11 @@ def train(
             f"Road-flooded IoU: {val_metrics['road_flooded_iou']:.4f}  |  "
             f"Time: {elapsed:.1f}s"
         )
+        class_iou_summary = " | ".join(
+            f"{class_name}: {class_iou if class_iou is not None else 'n/a'}"
+            for class_name, class_iou in val_metrics["per_class_iou"].items()
+        )
+        print(f"    Validation class IoU: {class_iou_summary}")
 
         row = {
             "epoch": epoch,
@@ -550,6 +555,7 @@ def train(
             "road_flooded_iou": val_metrics["road_flooded_iou"],
             "road_non_flooded_iou": val_metrics["road_non_flooded_iou"],
             "water_iou": val_metrics["water_iou"],
+            "per_class_iou": val_metrics["per_class_iou"],
             "elapsed_s": round(elapsed, 1),
         }
         history.append(row)
