@@ -294,7 +294,8 @@ def build_floodnet_dataloaders(
     batch_size: int = 8,
     img_size: Tuple[int, int] = (256, 256),
     num_workers: int = 0,
-    include_test: bool = True
+    include_test: bool = True,
+    pin_memory: bool = False,
 ) -> Dict[str, Any]:
     """
     Constructs train, val, and optional test PyTorch DataLoaders for FloodNet.
@@ -328,17 +329,32 @@ def build_floodnet_dataloaders(
         try:
             test_ds = FloodNetDataset(base_path, split="test", dual_transform=eval_tf)
             test_loader = DataLoader(
-                test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=False
+                test_ds,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+                persistent_workers=num_workers > 0,
             )
             test_count = len(test_ds)
         except Exception as exc:
             raise ValueError(f"Could not load FloodNet test split: {exc}") from exc
 
     train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=False
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=False
+        val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
     )
 
     return {

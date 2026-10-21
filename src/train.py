@@ -339,6 +339,7 @@ def train(
     img_size=IMG_SIZE,
     device=DEVICE,
     subset_fraction=1.0,
+    num_workers=0,
     resume_checkpoint=None,
     init_weights_checkpoint=None,
     auto_resume=True,
@@ -378,7 +379,11 @@ def train(
     print("=" * 70 + "\n")
 
     loaders = build_floodnet_dataloaders(
-        floodnet_dir=floodnet_dir, batch_size=batch_size, img_size=img_size, num_workers=0
+        floodnet_dir=floodnet_dir,
+        batch_size=batch_size,
+        img_size=img_size,
+        num_workers=num_workers,
+        pin_memory=device.type == "cuda",
     )
     train_loader = loaders["train_loader"]
     val_loader = loaders["val_loader"]
@@ -388,7 +393,14 @@ def train(
         train_ds = train_loader.dataset
         n_sub = max(1, int(len(train_ds) * subset_fraction))
         indices = random.sample(range(len(train_ds)), n_sub)
-        train_loader = DataLoader(Subset(train_ds, indices), batch_size=batch_size, shuffle=True, num_workers=0)
+        train_loader = DataLoader(
+            Subset(train_ds, indices),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=device.type == "cuda",
+            persistent_workers=num_workers > 0,
+        )
         print(f"[Subset] Using {n_sub}/{len(train_ds)} training samples ({subset_fraction:.0%})")
 
     print(f"[Data] Train: {counts['train']} | Val: {counts['val']} | Test: {counts['test']}")
@@ -408,6 +420,7 @@ def train(
         "base_features": base_features,
         "img_size": list(img_size),
         "batch_size": batch_size,
+        "num_workers": num_workers,
         "lr": lr,
         "weight_decay": weight_decay,
         "patience": patience,
@@ -646,6 +659,12 @@ def parse_args():
     parser.add_argument("--floodnet-dir", type=Path, default=FLOODNET_DIR)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help="Data loader worker processes; use a small positive value to avoid starving the GPU",
+    )
     parser.add_argument("--lr", type=float, default=LEARNING_RATE)
     parser.add_argument("--subset", type=float, default=1.0, help="Fraction of training data [0-1]")
     parser.add_argument("--base-features", type=int, default=BASE_FEATURES)
@@ -689,6 +708,7 @@ if __name__ == "__main__":
         floodnet_dir=args.floodnet_dir,
         epochs=args.epochs,
         batch_size=args.batch_size,
+        num_workers=args.num_workers,
         lr=args.lr,
         subset_fraction=args.subset,
         base_features=args.base_features,
