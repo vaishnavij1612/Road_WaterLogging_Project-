@@ -9,9 +9,8 @@ from src.config import MODELS_DIR
 
 
 def default_checkpoint_path() -> Path:
-    """Prefer the corrected-loss model when it has been downloaded locally."""
-    corrected = MODELS_DIR / "floodnet_unet_corrected_dice_epoch20.pth"
-    return corrected if corrected.is_file() else MODELS_DIR / "floodnet_unet_best.pth"
+    """Select only the corrected-loss model; never hide its absence with a baseline fallback."""
+    return MODELS_DIR / "floodnet_unet_corrected_dice_epoch20.pth"
 
 
 st.set_page_config(

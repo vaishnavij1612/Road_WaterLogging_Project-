@@ -7,11 +7,13 @@ from app import default_checkpoint_path
 
 
 class TestAppCheckpointSelection(unittest.TestCase):
-    def test_falls_back_to_historical_checkpoint_when_corrected_file_is_absent(self):
+    def test_selects_corrected_path_and_never_falls_back_when_file_is_absent(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             model_dir = Path(temporary_directory)
             with patch("app.MODELS_DIR", model_dir):
-                self.assertEqual(default_checkpoint_path(), model_dir / "floodnet_unet_best.pth")
+                selected = default_checkpoint_path()
+                self.assertEqual(selected, model_dir / "floodnet_unet_corrected_dice_epoch20.pth")
+                self.assertFalse(selected.exists())
 
     def test_prefers_downloaded_corrected_loss_checkpoint(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
