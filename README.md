@@ -78,11 +78,11 @@ For Google Colab, use the corrected-loss notebook linked below. It pins the sour
 
 The prior checkpoint’s model weights load strictly into the current U-Net (all keys match). Its Adam state contains 64 parameter entries accumulated under the old loss, so resuming would carry optimizer moments shaped by the faulty objective. For the corrected run, initialize from the epoch-2 best model weights and start fresh optimizer, scheduler, epoch count, and history. This keeps the strongest existing initialization while avoiding stale optimizer state. `--init-weights` supports that workflow and `--reports-dir` keeps its history separate from the baseline.
 
-For a non-notebook GPU run, place the extracted dataset and ignored `floodnet_unet_best.pth` checkpoint on the GPU host, confirm `torch.cuda.is_available()` is `True`, and choose a new persistent run directory. The repository saves latest, best-mIoU, and best-Road-flooded checkpoints plus epoch history there. The local workspace currently has CPU-only PyTorch, no CUDA device, and no accessible remote GPU runtime. The reproducible Colab command is:
+For a non-notebook GPU run, place the extracted dataset and ignored `floodnet_unet_best.pth` checkpoint on the GPU host, confirm `torch.cuda.is_available()` is `True`, and choose a new persistent run directory. The repository saves latest, best-mIoU, and best-Road-flooded checkpoints plus epoch history there. The local workspace has CPU-only PyTorch; the corrected-loss run documented below used a Colab Tesla T4. The reproducible Colab command is:
 
 ```bash
 RUN_DIR=/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21
-python -m src.train --floodnet-dir /content/drive/MyDrive/FloodNet-Supervised_v1.0 --epochs 20 --init-weights /content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth --no-auto-resume --checkpoint-dir "$RUN_DIR" --reports-dir "$RUN_DIR" --drive-dir "$RUN_DIR"
+python -m src.train --floodnet-dir /content/FloodNet-Supervised_v1.0 --epochs 20 --init-weights /content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth --no-auto-resume --checkpoint-dir "$RUN_DIR" --reports-dir "$RUN_DIR" --drive-dir "$RUN_DIR"
 ```
 
 Select the checkpoint using validation metrics. Once training and model selection are finished, evaluate validation as needed and run the held-out test split once for final reporting.
@@ -114,6 +114,8 @@ The app accepts JPEG, PNG, and WEBP files, validates upload size and dimensions,
 
 The current app uses the actual segmentation model, not the legacy binary classifier. Its inference transform matches training resize and ImageNet normalization; output class masks are resized to the upload dimensions using nearest-neighbor interpolation.
 
+The app prefers `models/floodnet_unet_corrected_dice_epoch20.pth` when that local ignored checkpoint is present, and otherwise falls back to the historical `models/floodnet_unet_best.pth`. The corrected checkpoint used for the results above is available in the persistent Google Drive run directory and was also placed in this workspace; model weights are excluded from Git.
+
 ## Tests
 
 Run the included CPU-compatible tests:
@@ -137,7 +139,39 @@ These complete-split results confirm the old checkpoint does not detect Road-flo
 
 The identified loss defect was in `MulticlassDiceLoss`: it averaged each class's Dice score over every image, so an image with no positive pixels for a class contributed an automatic near-zero Dice score. With only 11.2% positive training images and batch size four, about 63% of randomly composed batches contain no Road-flooded image. That made the Dice term repeatedly penalize class-3 probability without positive localization evidence. The loss now averages Dice only over images where that class is present; weighted cross-entropy continues to train against false positives on negative images. A regression test covers absent-class handling. The controlled U-Net learnability test reaches class-3 IoU ≥0.85 on a small deliberately learnable mask batch. A separate real-data overfit using four class-3-positive **training** images at 64 × 64 reached class-3 IoU 0.996 after 300 updates. This verifies the data/loss/optimizer path can learn class 3, but is an overfit sanity check, not generalization evidence.
 
-The local host remains CPU-only (`torch.cuda.is_available()` is false), but a corrected-loss full-data run was started on a Google Colab Tesla T4. The last available terminal screenshot shows epoch 18 validation with Road-flooded IoU **0.2556** and mIoU **0.4084**, and reports that a new best Road-flooded checkpoint was saved. Epoch 19 had started when the runtime disconnected. Completion of epochs 19–20, the persistent Drive checkpoint/history files, the validation report, and prediction panels could not be verified from this session because browser control is disabled. Treat these as screenshot-confirmed interim metrics, not a final model evaluation or proof of effective road localization. The run should be inspected and, if needed, resumed from its latest valid corrected-loss checkpoint using the updated trainer at commit `b97ee3a` before selecting a checkpoint. The old checkpoint's affected-area and severity estimates remain unreliable until validation artifacts and plausible Road-flooded prediction regions are verified. The corrected-loss held-out test split has not been evaluated; keep it untouched until validation checkpoint selection is complete. Historical baseline reports remain as recorded above. Current access and run status are tracked in `reports/corrected_dice_gpu_status.json` and `reports/project_completion_status.md`.
+The local host remains CPU-only, but corrected-loss full-data training completed on a Google Colab Tesla T4. Persistent history records 20 epochs (4,155.9 seconds). The selected best-Road-flooded checkpoint is epoch 20. A fresh full validation evaluation on all 450 images reported mIoU 0.3876, pixel accuracy 0.7657, and Road-flooded IoU 0.2602. It counted 732,160 ground-truth Road-flooded pixels and 663,529 predicted pixels. Three genuine validation comparison panels were reviewed: Road-flooded regions appear in plausible segments in some road areas, alongside visible class confusion and spatial noise. After this validation-based model selection, the held-out test split was evaluated once: on 448 images, mIoU was 0.3753, pixel accuracy 0.7565, and Road-flooded IoU 0.2044, with 647,747 ground-truth and 643,467 predicted Road-flooded pixels. These results confirm nonzero detection on both unseen splits, but the modest IoU and visible errors do not support safety-critical use. The corrected-run artifacts are stored separately in `MyDrive/FloodNet_CorrectedDice_Run_2026-10-21/`; the original baseline reports remain unchanged. Exact corrected-run reports and history are checked in separately below. Current access and run status are tracked in `reports/corrected_dice_gpu_status.json` and `reports/project_completion_status.md`.
+
+Validation per-class IoU for the selected epoch-20 checkpoint:
+
+| Class | IoU |
+|---|---:|
+| Background | 0.0001 |
+| Building-flooded | 0.3930 |
+| Building-non-flooded | 0.4620 |
+| Road-flooded | 0.2602 |
+| Road-non-flooded | 0.5763 |
+| Water | 0.5283 |
+| Tree | 0.6226 |
+| Vehicle | 0.0965 |
+| Pool | 0.1989 |
+| Grass | 0.7381 |
+
+Final held-out test per-class IoU for the same selected checkpoint:
+
+| Class | IoU |
+|---|---:|
+| Background | 0.0001 |
+| Building-flooded | 0.3405 |
+| Building-non-flooded | 0.5081 |
+| Road-flooded | 0.2044 |
+| Road-non-flooded | 0.5763 |
+| Water | 0.5336 |
+| Tree | 0.5811 |
+| Vehicle | 0.0907 |
+| Pool | 0.1910 |
+| Grass | 0.7275 |
+
+The exact evaluation reports and full epoch history are available in `reports/evaluation_val_corrected_dice.json`, `reports/evaluation_test_corrected_dice.json`, and `reports/training_history_corrected_dice.json`. Genuine examples are saved in `reports/corrected_dice_visualizations/`: [validation example 1](reports/corrected_dice_visualizations/val_corrected_dice_comparison_1.png), [validation example 2](reports/corrected_dice_visualizations/val_corrected_dice_comparison_2.png), [test example 1](reports/corrected_dice_visualizations/test_corrected_dice_comparison_1.png), and [test example 2](reports/corrected_dice_visualizations/test_corrected_dice_comparison_2.png).
 
 FloodNet is aerial imagery. Generalization to street-level camera images is unverified. The model predicts 2D semantic classes; its project tiers do not estimate depth, water volume, passability, or safety. The repository’s generic `dataset/` collection is not suitable for training this FloodNet segmentation model because its annotations do not mark flooded-road pixels.
 

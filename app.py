@@ -8,6 +8,12 @@ from PIL import Image
 from src.config import MODELS_DIR
 
 
+def default_checkpoint_path() -> Path:
+    """Prefer the corrected-loss model when it has been downloaded locally."""
+    corrected = MODELS_DIR / "floodnet_unet_corrected_dice_epoch20.pth"
+    return corrected if corrected.is_file() else MODELS_DIR / "floodnet_unet_best.pth"
+
+
 st.set_page_config(
     page_title="AI Road Waterlogging Detection",
     page_icon="🌊",
@@ -30,7 +36,7 @@ def main():
     with st.sidebar:
         model_path = st.text_input(
             "U-Net checkpoint",
-            value=str(MODELS_DIR / "floodnet_unet_best.pth"),
+            value=str(default_checkpoint_path()),
         )
         st.markdown("### Project-defined severity thresholds")
         st.markdown("- NONE: ≤ 0.5%\n- LOW: > 0.5% to 15%\n- MODERATE: > 15% to 40%\n- SEVERE: > 40%")
@@ -59,6 +65,7 @@ def main():
     else:
         st.info(
             f"Checkpoint recorded Road-flooded validation IoU: {road_flooded_iou:.4f}. "
+            "The corrected-loss epoch-20 model reached 0.2602 Road-flooded IoU on the 450-image validation split. "
             "This is an academic prototype; a single image cannot establish water depth, passability, or safety."
         )
 

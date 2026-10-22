@@ -1,90 +1,94 @@
 {
-  "status": "corrected_gpu_run_incomplete_artifacts_unverified",
-  "verified_at_local_date": "2026-10-22",
+  "status": "corrected_loss_training_validation_and_final_test_complete",
+  "verified_at": "2026-10-22",
   "runtime": {
-    "python": "3.14.2",
-    "pytorch": "2.14.1+cpu",
-    "cuda_available": false,
-    "cuda_device_count": 0,
-    "visible_display_adapter": "Intel(R) UHD Graphics",
-    "nvidia_smi_available": false,
-    "docker_gpu_runtime_available": false,
-    "accessible_remote_gpu_runtime_or_tool": false
+    "provider": "Google Colab",
+    "gpu": "Tesla T4",
+    "pytorch": "2.11.0+cu130",
+    "cuda_available": true,
+    "drive_mounted": true,
+    "temporary_disk_free_gib_before_extraction": 70.24,
+    "temporary_disk_free_gib_after_train_validation_extraction": 50.15
   },
-  "corrected_training_run": {
-    "started": true,
-    "completion_verified": false,
-    "last_screenshot_observation": {
-      "epoch18_road_flooded_iou": 0.2556,
-      "epoch18_mean_iou": 0.4084,
-      "best_road_flooded_checkpoint_saved_message_visible": true,
-      "epoch19_started": true,
-      "epoch19_completion_verified": false,
-      "source": "user-supplied Colab terminal screenshot",
-      "drive_artifacts_independently_verified": false
-    },
-    "validation_after_corrected_loss": "partial screenshot evidence only; no report or prediction panels locally available",
-    "final_test_after_corrected_loss": null,
-    "note": "Do not treat epoch 18 as final model selection. Inspect persistent history/checkpoints and validation visualizations, resume if needed, then run the held-out test once only after validation review."
+  "source": {
+    "github_master_verified_before_run": "7bf7e17e37b1fa43d559c6a3b7274bb044a9707e",
+    "trainer_source_pin": "b97ee3a",
+    "notebook_loaded_from_stale_revision": "9cd5be4",
+    "colab_checkout_switched_to_verified_master_before_evaluation": true
   },
-  "initialization_checkpoint": {
-    "path": "models/floodnet_unet_best.pth",
-    "epoch": 2,
-    "best_validation_miou": 0.2072,
-    "model_config": {
-      "num_classes": 10,
-      "base_features": 32,
-      "image_size": [
-        256,
-        256
-      ]
-    },
-    "strict_model_state_load": "all keys matched",
-    "optimizer_state_entries": 64,
-    "choice": "Use model weights only and start fresh optimizer, scheduler, epoch counter, and run history; retain outputs in separate corrected-dice directories.",
-    "reason": "Adam moments are from the objective with the absent-class Dice penalty and should not be carried into corrected-loss training."
-  },
-  "existing_test_results": {
-    "status": "historical baseline only; not reevaluated during corrected-loss work",
-    "report": "reports/evaluation_test.json"
-  },
-  "gpu_workflow": "See README.md Train and resume section; uses --init-weights, separate --checkpoint-dir and --reports-dir, and persistent --drive-dir.",
-  "hosted_gpu_workflow": {
-    "provider_prepared": "Google Colab",
-    "notebook": "notebooks/FloodNet_UNet_Training.ipynb",
-    "pinned_source_commit": "b97ee3a (trainer); notebook pin update in 88b1b8d",
-    "dataset_drive_path": "/content/drive/MyDrive/FloodNet-Supervised_v1.0",
-    "initialization_checkpoint_drive_path": "/content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth",
-    "new_persistent_run_directory": "/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21",
+  "training": {
+    "completed_epochs": 20,
+    "total_training_seconds": 4155.9,
+    "corrected_run_directory": "MyDrive/FloodNet_CorrectedDice_Run_2026-10-21",
+    "persistent_latest_checkpoint": "floodnet_unet_last.pth",
+    "selected_checkpoint": "floodnet_unet_best_road_flooded.pth",
+    "selected_checkpoint_epoch": 20,
+    "local_checkpoint_copy": "models/floodnet_unet_corrected_dice_epoch20.pth (ignored by Git)",
+    "training_history": "reports/training_history_corrected_dice.json",
+    "history_records": 20,
+    "best_validation_miou_in_history": 0.4084,
     "baseline_outputs_overwritten": false,
-    "runtime_access_verified": true,
-    "runtime_access_note": "Earlier Colab access verified Drive mount and a Tesla T4 and executed corrected-loss training. Current browser-control tool reports Local browser use is disabled in Work settings, preventing access to the persistent run artifacts or runtime.",
-    "local_assets": {
-      "dataset_root": "floodnet_dataset/FloodNet-Supervised_v1.0",
-      "dataset_size_gb": 12.13,
-      "split_pairs": {
-        "train": 1445,
-        "val": 450,
-        "test": 448
-      },
-      "baseline_checkpoint": "models/floodnet_unet_best.pth",
-      "baseline_checkpoint_size_mb": 93,
-      "local_drive_free_gb": 47.64,
-      "verified_compressed_archives": {
-        "path": "colab_upload/",
-        "size_gb": 10.26,
-        "crc": "all four FloodNet ZIP archives passed CRC validation",
-        "contents": "three training archives with 1,445 image/mask pairs and one validation archive with 450 pairs; no test split"
-      },
-      "unused_invalid_archive": "floodnet_dataset/FloodNet.zip (4.08 GB; not recognized as a valid ZIP archive; do not transfer)"
-    },
-    "one_external_action_needed": "Enable browser control for this task so the Colab run directory and validation visuals can be inspected; verify the last completed epoch and resume from the latest valid corrected-loss checkpoint if training did not finish."
+    "dataset_pairs": {"train": 1445, "validation": 450, "test": 448},
+    "initialization_checkpoint": "MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth"
   },
-  "current_access": {
-    "browser_control_available": false,
-    "observed_error": "Local browser use is disabled in Work settings",
-    "local_checkpoint_present": "models/floodnet_unet_best.pth (historical baseline only)",
-    "corrected_run_checkpoint_present_locally": false,
-    "test_evaluation": "not performed for corrected-loss run"
-  }
+  "validation": {
+    "report": "reports/evaluation_val_corrected_dice.json",
+    "split": "val",
+    "samples": 450,
+    "miou": 0.38760145940469265,
+    "pixel_accuracy": 0.7656612820095486,
+    "road_flooded_iou": 0.26021807714325446,
+    "per_class_iou": {
+      "Background": 0.0001,
+      "Building-flooded": 0.393,
+      "Building-non-flooded": 0.462,
+      "Road-flooded": 0.2602,
+      "Road-non-flooded": 0.5763,
+      "Water": 0.5283,
+      "Tree": 0.6226,
+      "Vehicle": 0.0965,
+      "Pool": 0.1989,
+      "Grass": 0.7381
+    },
+    "road_flooded_true_pixels": 732160,
+    "road_flooded_predicted_pixels": 663529,
+    "prediction_visualizations": 3,
+    "visual_review": "Road-flooded pixels occur in plausible segments in some road regions, with visible class confusion and spatial noise remaining."
+  },
+  "test": {
+    "evaluated_once_after_validation_model_selection": true,
+    "report": "reports/evaluation_test_corrected_dice.json",
+    "split": "test",
+    "samples": 448,
+    "miou": 0.3753225904282672,
+    "pixel_accuracy": 0.756460326058524,
+    "road_flooded_iou": 0.20436259576873356,
+    "per_class_iou": {
+      "Background": 0.00008998044109359386,
+      "Building-flooded": 0.3404660275286303,
+      "Building-non-flooded": 0.5081437544374111,
+      "Road-flooded": 0.20436259576873356,
+      "Road-non-flooded": 0.5763149128733078,
+      "Water": 0.5336047916983118,
+      "Tree": 0.5811224125342374,
+      "Vehicle": 0.09067957684929294,
+      "Pool": 0.19097347877785245,
+      "Grass": 0.7274683733738012
+    },
+    "road_flooded_true_pixels": 647747,
+    "road_flooded_predicted_pixels": 643467,
+    "prediction_visualizations": 3,
+    "archive": "MyDrive/FloodNet_Training_Archives_2026-10-21/floodnet_test.zip",
+    "archive_crc_checked": true
+  },
+  "local_tests": {"command": "py -m pytest -q", "result": "32 passed in 64.73s"},
+  "app": {
+    "default_checkpoint": "prefers local corrected epoch-20 checkpoint when present; falls back to historical baseline otherwise",
+    "local_corrected_checkpoint_metadata_verified": {"epoch": 20, "road_flooded_validation_iou": 0.2602}
+  },
+  "historical_baseline": {
+    "reports_preserved": ["reports/evaluation_val.json", "reports/evaluation_test.json"],
+    "road_flooded_iou": 0.0
+  },
+  "limitations": "The corrected model detects Road-flooded on validation and test, but visible class confusion/spatial noise remains. It is an academic aerial-imagery prototype, not a reliable safety or passability system."
 }
