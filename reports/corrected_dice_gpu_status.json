@@ -1,6 +1,6 @@
 {
-  "status": "blocked_pending_gpu_compute",
-  "verified_at_local_date": "2026-10-21",
+  "status": "corrected_gpu_run_incomplete_artifacts_unverified",
+  "verified_at_local_date": "2026-10-22",
   "runtime": {
     "python": "3.14.2",
     "pytorch": "2.14.1+cpu",
@@ -12,10 +12,20 @@
     "accessible_remote_gpu_runtime_or_tool": false
   },
   "corrected_training_run": {
-    "started": false,
-    "reason": "No CUDA GPU or accessible remote GPU runtime is available to this task. Full FloodNet training was not run on CPU.",
-    "validation_after_corrected_loss": null,
-    "final_test_after_corrected_loss": null
+    "started": true,
+    "completion_verified": false,
+    "last_screenshot_observation": {
+      "epoch18_road_flooded_iou": 0.2556,
+      "epoch18_mean_iou": 0.4084,
+      "best_road_flooded_checkpoint_saved_message_visible": true,
+      "epoch19_started": true,
+      "epoch19_completion_verified": false,
+      "source": "user-supplied Colab terminal screenshot",
+      "drive_artifacts_independently_verified": false
+    },
+    "validation_after_corrected_loss": "partial screenshot evidence only; no report or prediction panels locally available",
+    "final_test_after_corrected_loss": null,
+    "note": "Do not treat epoch 18 as final model selection. Inspect persistent history/checkpoints and validation visualizations, resume if needed, then run the held-out test once only after validation review."
   },
   "initialization_checkpoint": {
     "path": "models/floodnet_unet_best.pth",
@@ -42,17 +52,21 @@
   "hosted_gpu_workflow": {
     "provider_prepared": "Google Colab",
     "notebook": "notebooks/FloodNet_UNet_Training.ipynb",
-    "pinned_source_commit": "9b8058b6a5b6c303a1c42b0eaa40dc97bed633d6",
+    "pinned_source_commit": "b97ee3a (trainer); notebook pin update in 88b1b8d",
     "dataset_drive_path": "/content/drive/MyDrive/FloodNet-Supervised_v1.0",
     "initialization_checkpoint_drive_path": "/content/drive/MyDrive/FloodNet_Checkpoints/floodnet_unet_best.pth",
     "new_persistent_run_directory": "/content/drive/MyDrive/FloodNet_CorrectedDice_Run_2026-10-21",
     "baseline_outputs_overwritten": false,
-    "runtime_access_verified": false,
-    "runtime_access_note": "The notebook loaded in the browser. The user-provided account typeprohelp1@gmail.com was entered in Google's sign-in flow; Google then required a password. No password or authentication secret was entered. Drive, Google storage capacity, Colab temporary disk capacity, and hosted GPU runtime remain inaccessible until the account holder completes sign-in.",
+    "runtime_access_verified": true,
+    "runtime_access_note": "Earlier Colab access verified Drive mount and a Tesla T4 and executed corrected-loss training. Current browser-control tool reports Local browser use is disabled in Work settings, preventing access to the persistent run artifacts or runtime.",
     "local_assets": {
       "dataset_root": "floodnet_dataset/FloodNet-Supervised_v1.0",
       "dataset_size_gb": 12.13,
-      "split_pairs": {"train": 1445, "val": 450, "test": 448},
+      "split_pairs": {
+        "train": 1445,
+        "val": 450,
+        "test": 448
+      },
       "baseline_checkpoint": "models/floodnet_unet_best.pth",
       "baseline_checkpoint_size_mb": 93,
       "local_drive_free_gb": 47.64,
@@ -64,6 +78,13 @@
       },
       "unused_invalid_archive": "floodnet_dataset/FloodNet.zip (4.08 GB; not recognized as a valid ZIP archive; do not transfer)"
     },
-    "one_external_action_needed": "Complete Google sign-in for typeprohelp1@gmail.com in the open browser, including any password and MFA prompts directly with Google, then authorize Colab Drive access. Do not send credentials in chat. Afterward, verify Drive free space and Colab temporary-disk capacity before transferring local assets, select a GPU, and execute the prepared notebook."
+    "one_external_action_needed": "Enable browser control for this task so the Colab run directory and validation visuals can be inspected; verify the last completed epoch and resume from the latest valid corrected-loss checkpoint if training did not finish."
+  },
+  "current_access": {
+    "browser_control_available": false,
+    "observed_error": "Local browser use is disabled in Work settings",
+    "local_checkpoint_present": "models/floodnet_unet_best.pth (historical baseline only)",
+    "corrected_run_checkpoint_present_locally": false,
+    "test_evaluation": "not performed for corrected-loss run"
   }
 }
