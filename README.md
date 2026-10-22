@@ -114,7 +114,7 @@ The app accepts JPEG, PNG, and WEBP files, validates upload size and dimensions,
 
 The current app uses the actual segmentation model, not the legacy binary classifier. Its inference transform matches training resize and ImageNet normalization; output class masks are resized to the upload dimensions using nearest-neighbor interpolation.
 
-The app prefers `models/floodnet_unet_corrected_dice_epoch20.pth` when that local ignored checkpoint is present, and otherwise falls back to the historical `models/floodnet_unet_best.pth`. The corrected checkpoint used for the results above is available in the persistent Google Drive run directory and was also placed in this workspace; model weights are excluded from Git.
+The app requires `models/floodnet_unet_corrected_dice_epoch20.pth` and reports a missing-checkpoint error if it is unavailable; it never silently substitutes the historical baseline that produced zero Road-flooded IoU. The corrected checkpoint used for the results above is available in the persistent Google Drive run directory and was also placed in this workspace; model weights are excluded from Git.
 
 ## Tests
 
